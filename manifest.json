@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Slop Off",
+  "version": "1.1.0",
+  "minimum_chrome_version": "109",
+  "description": "Mutes YouTube ads, auto-clicks Skip when available, and restores your sound when the ad ends. No setup, no account, no tracking.",
+  "permissions": ["debugger"],
+  "icons": {
+    "128": "logo.png"
+  },
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
