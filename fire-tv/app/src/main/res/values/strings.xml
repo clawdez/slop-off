@@ -1,0 +1,1 @@
+<resources><string name="service_description">Local YouTube diagnostics only. Reports candidate ad controls to local debug logs. Does not click, mute, transmit data, or record viewing history. Full tree dumps are manual and may contain on-screen text.</string></resources>
