@@ -81,3 +81,32 @@ adb -s 192.168.86.30:5555 logcat -d -t 200 -v brief SLOPOFF_SERVICE:I SLOPOFF_FO
 ```
 
 Raw settings hierarchy remains local and is not committed. YouTube observations are still untested.
+
+## Accessibility enabled with explicit approval — 2026-09-26
+
+User explicitly approved ADB enablement after the access scope was explained. Before changing settings, saved the local baseline: `enabled_accessibility_services=null`, `accessibility_enabled=0`. Preserved the enabled-service list and added only `tv.slopoff/.DiagnosticService`, then set `accessibility_enabled=1`.
+
+Observed on the physical Stick:
+
+- Enabled service list: `tv.slopoff/.DiagnosticService`.
+- `dumpsys accessibility` shows Slop Off TV diagnostics bound, content-retrieval capability 1, and the three requested window/content event types.
+- Touch exploration, display/navigation magnification and system autoclick all remain false.
+- `SLOPOFF_SERVICE` reports `connected:true`.
+- `SLOPOFF_FOREGROUND` reports `com.amazon.tv.settings.v2` with active accessibility window 13. No settings-screen text was logged by Slop Off.
+- Installed version is 0.1-diagnostic, debug signing scheme v2. APK manifest has no network/audio/recording permissions; source scan finds no performAction, dispatchGesture or AudioManager operations.
+
+Commands used:
+
+```powershell
+adb -s 192.168.86.30:5555 shell settings get secure enabled_accessibility_services
+adb -s 192.168.86.30:5555 shell settings get secure accessibility_enabled
+adb -s 192.168.86.30:5555 shell settings put secure enabled_accessibility_services tv.slopoff/.DiagnosticService
+adb -s 192.168.86.30:5555 shell settings put secure accessibility_enabled 1
+adb -s 192.168.86.30:5555 shell dumpsys accessibility
+adb -s 192.168.86.30:5555 shell dumpsys package tv.slopoff
+adb -s 192.168.86.30:5555 logcat -d -t 300 -v brief SLOPOFF_SERVICE:I SLOPOFF_FOREGROUND:I '*:S'
+```
+
+**WORKING (physical device):** Accessibility binding and foreground package observation for Fire TV Settings. **NEEDS DEVICE TEST:** Official YouTube foreground detection, normal playback, ad signals and Skip exposure. No automatic interaction exists and no ad has been observed yet.
+
+Reversal: disable diagnostics using the app's observation toggle, or remove Slop Off from the current secure enabled-service list through ADB. If it is still the only enabled service, delete that list setting and restore accessibility_enabled to the saved value 0. Re-read the list first and preserve any services enabled since this test. The local prior-state snapshot is in the development workspace, outside the repository.
