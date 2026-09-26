@@ -75,3 +75,9 @@ If the active tree is insufficient: inspect alternate parents/windows first, the
 See [FINDINGS.md](FINDINGS.md) for actual build/device evidence and status.
 
 Reference APIs: [Android accessibility services](https://developer.android.com/reference/android/accessibilityservice/AccessibilityService), [Amazon installation via ADB](https://developer.amazon.com/docs/fire-tv/installing-and-running-your-app.html).
+
+## Tested result (2026-09-26)
+
+Installed and launched on the physical AFTSSS / API 28 Fire TV. Accessibility binding and official YouTube foreground detection work. On YouTube 25.30.r0.v283.0, captures after user-confirmed visible Skip and normal playback both exposed 16 unlabeled nodes with no click actions; a second accessibility inspector corroborated the sparse tree. There is no safe node target for auto-skip in this evidence.
+
+Media transport capabilities differed once between ad and normal playback (55 versus 383: rewind/fast-forward/seek became available). This is only a research lead, not an ad detector or Skip-ready signal, and was read through ADB rather than by the installed app. See FINDINGS.md for limitations and outstanding tests.

@@ -1,13 +1,13 @@
 # Fire TV findings
 
-## Status at diagnostic implementation
+## Current status after physical device tests — 2026-09-26
 
-- **WORKING:** Repository inspection and independent Fire TV scaffold on `fire-tv-mvp`.
-- **PARTIALLY WORKING:** Diagnostic implementation exists; build and device verification pending below.
-- **NOT WORKING / NOT IMPLEMENTED:** Auto-skip and audio suppression intentionally absent until device evidence supports them.
-- **NEEDS DEVICE TEST:** Installation, accessibility enablement, foreground detection, ad/Skip exposure, clickability and ancestors, ACTION_CLICK result, false positives, performance and survivability.
+- **WORKING:** Reproducible debug build and lint, installation and launch on Fire TV AFTSSS / API 28, approved accessibility binding, official YouTube foreground identification, bounded logs and manual tree dumps.
+- **PARTIALLY WORKING:** The diagnostic probe answers what this installed YouTube version exposes. Its active tree is accessible but has no useful ad/Skip controls. A media-action difference is observed once, not validated as an ad detector.
+- **NOT WORKING / NOT IMPLEMENTED:** Node-based auto-skip has no exposed target in tested captures; automatic clicking and audio suppression remain absent. No claim that ACTION_CLICK or clean muting works.
+- **NEEDS DEVICE TEST:** Repeated ad/content comparisons, non-skippable ads, countdown-to-Skip transitions, two-ad pods, live/unseekable content false positives, performance and reboot/sleep/restart survivability.
 
-No physical Fire Stick behavior has been observed yet. V0 success is not established.
+The physical diagnostic milestone is reached. The preferred hands-free skipping outcome is not achieved. Scope of evidence: official YouTube 25.30.r0.v283.0 on the tested API 28 Stick. User confirmations and captures are close in time, not frame-synchronized.
 
 ## Existing browser architecture
 
@@ -17,12 +17,12 @@ Manifest V3 loads content.js on YouTube pages and a background.js service worker
 
 | Scenario | Foreground | Ad nodes | Skip node / ancestor | Click result | Outcome |
 |---|---|---|---|---|---|
-| Normal video | Untested | Untested | Untested | Not attempted | Pending |
+| Normal video | YouTube | No labels/candidates | No clickable nodes | Not attempted | 16 nodes; media actions 383 |
 | Skippable ad, countdown | Untested | Untested | Untested | Not attempted | Pending |
-| Skip available | Untested | Untested | Untested | Not attempted | Pending |
+| Skip available | YouTube | No labels/candidates | No clickable nodes/ancestors | No target; not attempted | User confirmed visible Skip; 16 nodes |
 | Non-skippable ad | Untested | Untested | Untested | Not attempted | Pending |
 | Two-ad pod | Untested | Untested | Untested | Not attempted | Pending |
-| Content resumes | Untested | Untested | Untested | Not attempted | Pending |
+| Content resumes | YouTube | No labels/candidates | No clickable nodes | Not attempted | User confirmed normal playback |
 
 Only redacted control metadata belongs here; do not add viewing history or raw accessibility dumps.
 
@@ -165,3 +165,15 @@ adb -s 192.168.86.30:5555 shell dumpsys media_session
 ```
 
 Next physical step: user lets normal video resume so its tree and playback state can be compared. No audio suppression or automatic input will be added based on the evidence so far.
+
+## Normal playback comparison — 2026-09-26
+
+After the user confirmed normal video was playing, manual accessibility capture at elapsedMs 1761582434 again returned 16 nodes, no text/descriptions, zero clickable nodes, zero click actions and no candidates, not truncated. The only IDs remained the content and action-bar layout containers. This provides no usable accessibility distinction between the tested ad and normal playback states.
+
+YouTube media session stayed active with playback state=3, speed=1.0 and no custom actions/errors. Supported actions changed from **55 during the ad-time inspection to 383 during confirmed normal video**. XOR=328, comprising REWIND (8), FAST_FORWARD (64), SEEK_TO (256). These are supported transport capabilities, not an explicit ad flag or a Skip-ad command. The ordinary SKIP_TO_NEXT bit was present in both snapshots and must not be confused with skipping an advertisement.
+
+This is one promising but unvalidated fallback-B observation. Missing seek support can also occur with other content/states; test repeated skippable/non-skippable ads, live streams, transitions and normal playback before considering any detector. It gives no proven countdown/Skip-ready signal. The ADB shell's ability to read media sessions does not prove that a standalone app can: Android's getActiveSessions requires MEDIA_CONTENT_CONTROL or an enabled notification listener. Neither capability has been added or granted to this APK.
+
+References: [PlaybackState action constants](https://developer.android.com/reference/android/media/session/PlaybackState), [MediaSessionManager access requirements](https://developer.android.com/reference/android/media/session/MediaSessionManager#getActiveSessions(android.content.ComponentName)).
+
+No screen-capture/OCR fallback, media command, automated click, or audio manipulation was implemented. Fallback C is deferred while the lower-cost media-state lead remains unvalidated. Diagnostic app remains enabled and observation-only; manual tree dumps are one-shot, and no continuous ADB capture was left running.
