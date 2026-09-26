@@ -38,3 +38,27 @@ Only redacted control metadata belongs here; do not add viewing history or raw a
 - **WORKING:** Debug compilation, APK packaging/signature and lint checks.
 - **PARTIALLY WORKING:** Diagnostic service and TV UI compile; physical runtime not yet verified.
 - Device gauntlet, auto-skip viability and audio suppression remain unproven.
+
+## First physical device connection — 2026-09-26
+
+User approved the TV's ADB authorization prompt. `adb devices -l` then reported an authorized `device`, product/device `sheldonp`, model `AFTSSS`. `getprop ro.build.version.sdk` returned `28`. `pm list packages youtube` returned `com.amazon.firetv.youtube`, matching the diagnostic allowlist.
+
+Commands used (session address supplied to ADB only):
+
+```powershell
+adb connect 192.168.86.30:5555
+adb devices -l
+adb -s 192.168.86.30:5555 get-state
+adb -s 192.168.86.30:5555 install -r fire-tv/app/build/outputs/apk/debug/app-debug.apk
+adb -s 192.168.86.30:5555 shell pm path tv.slopoff
+adb -s 192.168.86.30:5555 shell getprop ro.build.version.sdk
+adb -s 192.168.86.30:5555 shell pm list packages youtube
+adb -s 192.168.86.30:5555 shell am start -W -n tv.slopoff/.MainActivity
+```
+
+Observed: streamed installation returned `Success`; `pm path` confirmed the installed base.apk; activity launch returned `Status: ok` and `Activity: tv.slopoff/.MainActivity`.
+
+- **WORKING (physical device):** ADB authorization, APK installation, package verification and activity launch.
+- **NEEDS DEVICE TEST:** Accessibility enablement and service connection, UI appearance/remote navigation, and all YouTube accessibility observations. No Skip/ad signal or successful click has been observed. V0 success remains unproven.
+
+Next physical step: select Open accessibility setup and report the options Fire OS exposes.
