@@ -25,3 +25,16 @@ Manifest V3 loads content.js on YouTube pages and a background.js service worker
 | Content resumes | Untested | Untested | Untested | Not attempted | Pending |
 
 Only redacted control metadata belongs here; do not add viewing history or raw accessibility dumps.
+
+## Build verification — 2026-09-26
+
+- `assembleDebug lintDebug`: BUILD SUCCESSFUL (JDK 17, Gradle 8.9, AGP 8.7.3).
+- Lint: zero errors, 13 warnings (English-only diagnostic UI text and simple vector banner sizing). Only the Google Play target-SDK publication rule is disabled, explicitly, for this sideload-only API 28 experiment.
+- `apksigner verify --verbose`: signature verified (v2).
+- `aapt dump badging`: package tv.slopoff, version 0.1-diagnostic, min/target SDK 28, TV launcher activity present; no requested network permissions.
+- APK: `app/build/outputs/apk/debug/app-debug.apk` (2,382,529 bytes).
+- Gradle distribution SHA-256 verified against Gradle's published checksum and pinned in wrapper properties.
+- `git diff main -- background.js content.js manifest.json`: empty.
+- **WORKING:** Debug compilation, APK packaging/signature and lint checks.
+- **PARTIALLY WORKING:** Diagnostic service and TV UI compile; physical runtime not yet verified.
+- Device gauntlet, auto-skip viability and audio suppression remain unproven.

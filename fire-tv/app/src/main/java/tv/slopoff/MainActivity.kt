@@ -50,4 +50,3 @@ class MainActivity : Activity() {
     override fun onResume() { super.onResume(); DiagnosticService.uiRefresh = { runOnUiThread(refresh) }; render() }
     override fun onPause() { DiagnosticService.uiRefresh = null; super.onPause() }
 }
-

@@ -181,6 +181,3 @@ class DiagnosticService : AccessibilityService() {
         super.onDestroy()
     }
 }
-
-
-

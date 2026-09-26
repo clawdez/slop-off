@@ -6,6 +6,8 @@ android {
     namespace = "tv.slopoff"
     compileSdk = 35
     buildFeatures { buildConfig = true }
+    // Sideload-only API 28 Fire OS experiment; Google Play publication is out of scope.
+    lint { disable += "ExpiredTargetSdkVersion" }
     defaultConfig {
         applicationId = "tv.slopoff"
         minSdk = 28
@@ -19,4 +21,3 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
-
