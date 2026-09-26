@@ -185,3 +185,5 @@ User reported an ad after being asked to start another video. Immediate read-onl
 The associated manual tree at elapsedMs 1761951126 exposed 16 nodes, zero text labels/descriptions, zero click-action support and zero candidates, not truncated. No input, audio changes or screen capture were performed.
 
 This is two user-reported ad snapshots and one normal-playback snapshot, not a validated classifier. Whether Skip is visible during this second snapshot is pending user confirmation; the result must not be treated as evidence of Skip readiness. Live/unseekable content and transition false positives remain untested. Standalone media-session access is also unverified.
+
+User subsequently confirmed Skip was visible on the second ad. A follow-up media-session capture still returned actions=55, custom actions empty, with the same playback-state update timestamp (1761915333). Thus no additional explicit Skip-ad command or readiness flag was observed at that moment. No before-Skip countdown sample was obtained, so this does not prove that the media state never changes when Skip appears. Next comparison: normal playback after this second ad ends.
