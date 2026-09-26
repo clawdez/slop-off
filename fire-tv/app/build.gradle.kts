@@ -12,8 +12,8 @@ android {
         applicationId = "tv.slopoff"
         minSdk = 28
         targetSdk = 28
-        versionCode = 1
-        versionName = "0.1-diagnostic"
+        versionCode = 2
+        versionName = "0.2-capture-probe"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

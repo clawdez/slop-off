@@ -81,3 +81,16 @@ Reference APIs: [Android accessibility services](https://developer.android.com/r
 Installed and launched on the physical AFTSSS / API 28 Fire TV. Accessibility binding and official YouTube foreground detection work. On YouTube 25.30.r0.v283.0, captures after user-confirmed visible Skip and normal playback both exposed 16 unlabeled nodes with no click actions; a second accessibility inspector corroborated the sparse tree. There is no safe node target for auto-skip in this evidence.
 
 Media transport capabilities differed across two ad/content pairs (55 during each ad versus 383 during subsequent playback: rewind/fast-forward/seek became available). This is only a research lead, not an ad detector or Skip-ready signal, and was read through ADB rather than by the installed app. See FINDINGS.md for limitations and outstanding tests.
+
+## One-frame capture probe (0.2, manual experiment)
+
+This probe tests whether normal MediaProjection consent can deliver a frame on the physical API 28 Fire Stick. It is not a visual detector and does not enable auto-skip. It adds no runtime/network/storage/audio permissions. The activity is protected by the privileged DUMP permission for explicit ADB use:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell am start -n tv.slopoff/.CaptureProbeActivity
+adb -s FIRE_TV_IP:5555 logcat -v brief SLOPOFF_CAPTURE:I '*:S'
+```
+
+The TV must grant screen-capture consent. After approval, the activity moves its task to the background and waits at most 12 seconds for an active YouTube accessibility root. It then creates a 640x360 virtual display, inspects one frame in memory and releases capture. A foreground change, denial, error, timeout or activity destruction stops the experiment. A frame already in flight when foreground changes is discarded. No image is saved or transmitted. Only dimensions and aggregate brightness counts are logged. An all-black frame or visible UI pixels alone does not prove a Skip button can be captured or recognized; that requires further device evidence. The projection token is not persisted or reused.
+
+This implementation targets the specified API 28 device and is not a production capture service for newer Android versions. Existing diagnostics remain independent.

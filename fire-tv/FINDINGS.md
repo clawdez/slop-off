@@ -202,3 +202,13 @@ After the user reported pressing Skip, the official YouTube activity remained fo
 The media-action difference repeated across both pairs. This remains an unvalidated correlation, not an ad classification rule: live/unseekable playback, errors, transitions, non-skippable ads and countdown timing have not been tested. No direct evidence yet establishes standalone app access to these fields, Skip readiness or a safe activation target. No additional permissions or media controls were introduced.
 
 Publication history: the initial push was denied because Ferxxo-pa lacked write access. After the user accepted repository access, the connected GitHub API confirmed push=true for clawdez/slop-off. The committed fire-tv-mvp branch is ready for publication as the diagnostic milestone. The diagnostic app remains observation-only, with no continuous ADB logging process running.
+
+## Next feasibility experiment: source inspection and capture probe
+
+Read the upstream Cobalt 25.lts.1+ implementation of CobaltA11yHelper. It defines nine 10x10 virtual cells for D-pad navigation, leaves their labels blank, and returns false for virtual-node actions. This strongly explains the nine tiny unlabeled leaf nodes observed on this YouTube installation, though upstream source is not proof of the exact installed binary. Enabling a spoken-feedback service would affect YouTube's screen-reader mode; it does not establish a real Skip node and was not attempted.
+
+Source: https://github.com/youtube/cobalt/blob/25.lts.1%2B/starboard/android/apk/app/src/main/java/dev/cobalt/coat/CobaltA11yHelper.java
+
+Fire TV's service registry exposes media_projection and media_session. Service presence is not proof that app capture works. Added a manual, permission-gated, one-frame MediaProjection probe (0.2) to test this empirically before implementing visual detection. Captures remain in memory; only aggregate frame statistics are logged. No screenshots are uploaded, saved to disk, or included in the repository. No input or audio changes are added. Physical capture consent/result are pending.
+
+0.2 validation: assembleDebug and lintDebug passed; APK v2 signature verified, versionCode=2, min/target SDK 28, no requested permissions added. Physical MediaProjection functionality remains pending the consent test.
