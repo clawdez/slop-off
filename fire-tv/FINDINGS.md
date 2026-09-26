@@ -62,3 +62,22 @@ Observed: streamed installation returned `Success`; `pm path` confirmed the inst
 - **NEEDS DEVICE TEST:** Accessibility enablement and service connection, UI appearance/remote navigation, and all YouTube accessibility observations. No Skip/ad signal or successful click has been observed. V0 success remains unproven.
 
 Next physical step: select Open accessibility setup and report the options Fire OS exposes.
+
+## Accessibility setup limitation — 2026-09-26
+
+After the user opened setup, the resumed activity was `com.amazon.tv.settings.v2/.tv.accessibility.AccessibilityActivity`. A local UI hierarchy inspection showed Closed Caption, Alexa Caption, VoiceView, Text Banner, Screen Magnifier and High Contrast Text (Experimental); no Slop Off entry or scrollable node was exposed. `settings get secure enabled_accessibility_services` returned `null`; `dumpsys accessibility` showed `services:{}`. No Slop Off service-connected log was present.
+
+An attempted ADB enablement was rejected by automatic approval review before execution because persistent accessibility access requires explicit user approval. No secure settings were changed by that rejected command. Await explicit approval before enabling `tv.slopoff/.DiagnosticService`. Preserve existing enabled-service entries and capture prior settings for reversal. Do not retry or bypass this gate without approval.
+
+Additional read-only commands used:
+
+```powershell
+adb -s 192.168.86.30:5555 shell settings get secure enabled_accessibility_services
+adb -s 192.168.86.30:5555 shell dumpsys activity activities
+adb -s 192.168.86.30:5555 shell uiautomator dump /data/local/tmp/slopoff-settings.xml
+adb -s 192.168.86.30:5555 pull /data/local/tmp/slopoff-settings.xml work/fire-tv-settings.xml
+adb -s 192.168.86.30:5555 shell dumpsys accessibility
+adb -s 192.168.86.30:5555 logcat -d -t 200 -v brief SLOPOFF_SERVICE:I SLOPOFF_FOREGROUND:I '*:S'
+```
+
+Raw settings hierarchy remains local and is not committed. YouTube observations are still untested.
