@@ -132,3 +132,36 @@ adb -s 192.168.86.30:5555 logcat -d -t 1000 -v brief SLOPOFF_SERVICE:I SLOPOFF_F
 adb -s 192.168.86.30:5555 shell am broadcast -a tv.slopoff.DUMP -n tv.slopoff/.DiagnosticReceiver
 adb -s 192.168.86.30:5555 logcat -d -t 500 -v brief SLOPOFF_TREE:I SLOPOFF_YOUTUBE:I '*:S'
 ```
+
+## User-confirmed ad and visible Skip — 2026-09-26
+
+User reported an ad playing and then explicitly confirmed that Skip was visible. A manual dump was requested immediately after each report; confirmation and capture are not frame-synchronized. Both captures exposed 16 nodes with no text, descriptions, clickable nodes or ACTION_CLICK support, and no diagnostic candidates. The Skip-confirmed capture was not truncated (elapsed timestamp 1761454108). The only resource IDs were `android:id/content` and `com.amazon.firetv.youtube:id/action_bar_root`; both identify layout containers, not an ad or Skip control. All exposed ancestors were also non-clickable.
+
+Alternate inspection: UI Automator independently exposed 16 unlabeled, non-clickable nodes in the same YouTube package. Accessibility window inspection reported only the active YouTube application window (id 19), with no separate ad/Skip window. No screenshots, OCR, coordinate clicks, key presses or ACTION_CLICK attempts were used.
+
+Installed official YouTube version: `25.30.r0.v283.0`, versionCode `325302830`, targetSdk 34, minSdk 24. These findings apply to this tested installation; do not generalize them to every YouTube/Fire OS release.
+
+Current answers:
+
+- A: YouTube foreground identification observed successfully.
+- B/C: No ad-specific or Skip accessibility label/ID exposed in the captures following user-confirmed ad and visible Skip.
+- D/E: No clickable node or ancestor exposed; all 16 inspected nodes lack click-action support.
+- F: ACTION_CLICK not attempted because no supported target exists. Its effectiveness is unproven.
+- G: No reliable ad-vs-content signal established. Auto-skip must remain unimplemented.
+
+Fallback A has been checked through complete active-root traversal, ancestors, system window enumeration and a second accessibility inspector. These checks found no usable Skip target. This is evidence against node-based auto-skip on this installed YouTube version, not proof that every possible accessibility configuration fails.
+
+Fallback B preliminary read-only media-session inspection: YouTube active=true, playback state=3, speed=1.0, actions=55, custom actions empty, error=null. These fields alone do not establish an ad signal. Normal-content comparison is still required. Raw media metadata was kept local and was not committed.
+
+Additional commands:
+
+```powershell
+adb -s 192.168.86.30:5555 shell am broadcast -a tv.slopoff.DUMP -n tv.slopoff/.DiagnosticReceiver
+adb -s 192.168.86.30:5555 shell dumpsys accessibility
+adb -s 192.168.86.30:5555 shell uiautomator dump /data/local/tmp/slopoff-ad-ui.xml
+adb -s 192.168.86.30:5555 pull /data/local/tmp/slopoff-ad-ui.xml work/youtube-ad-uiautomator.xml
+adb -s 192.168.86.30:5555 shell dumpsys package com.amazon.firetv.youtube
+adb -s 192.168.86.30:5555 shell dumpsys media_session
+```
+
+Next physical step: user lets normal video resume so its tree and playback state can be compared. No audio suppression or automatic input will be added based on the evidence so far.
