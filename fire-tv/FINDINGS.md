@@ -110,3 +110,25 @@ adb -s 192.168.86.30:5555 logcat -d -t 300 -v brief SLOPOFF_SERVICE:I SLOPOFF_FO
 **WORKING (physical device):** Accessibility binding and foreground package observation for Fire TV Settings. **NEEDS DEVICE TEST:** Official YouTube foreground detection, normal playback, ad signals and Skip exposure. No automatic interaction exists and no ad has been observed yet.
 
 Reversal: disable diagnostics using the app's observation toggle, or remove Slop Off from the current secure enabled-service list through ADB. If it is still the only enabled service, delete that list setting and restore accessibility_enabled to the saved value 0. Re-read the list first and preserve any services enabled since this test. The local prior-state snapshot is in the development workspace, outside the repository.
+
+## Official YouTube foreground and initial tree — 2026-09-26
+
+After the user reported opening YouTube:
+
+- Resumed activity: `com.amazon.firetv.youtube/dev.cobalt.app.MainActivity`.
+- Slop Off independently reported foreground package `com.amazon.firetv.youtube`, window 19.
+- Event-driven scan: 16 nodes, zero candidates, not truncated; four content events and seven window events in the reported counters.
+- Shell-triggered manual dump succeeded: 13 nodes, zero text labels, zero descriptions, two view IDs, zero clickable controls. Classes were android.view.View, android.widget.FrameLayout and android.widget.LinearLayout. Node count changed between observations; these are separate snapshots.
+- The exact on-TV content state was not confirmed. Do not label this snapshot normal playback or an ad.
+- Raw dump was retained only in the local work directory; only aggregate structure is recorded here.
+
+**WORKING (physical device):** Official YouTube foreground detection and manual diagnostic dump. **NEEDS DEVICE TEST:** Playback/ad transitions and Skip controls. The sparse initial tree does not establish whether ad auto-skip is viable.
+
+Commands used:
+
+```powershell
+adb -s 192.168.86.30:5555 shell dumpsys activity activities
+adb -s 192.168.86.30:5555 logcat -d -t 1000 -v brief SLOPOFF_SERVICE:I SLOPOFF_FOREGROUND:I SLOPOFF_YOUTUBE:I SLOPOFF_AD_CANDIDATE:I SLOPOFF_SKIP_CANDIDATE:I '*:S'
+adb -s 192.168.86.30:5555 shell am broadcast -a tv.slopoff.DUMP -n tv.slopoff/.DiagnosticReceiver
+adb -s 192.168.86.30:5555 logcat -d -t 500 -v brief SLOPOFF_TREE:I SLOPOFF_YOUTUBE:I '*:S'
+```
