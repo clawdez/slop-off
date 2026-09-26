@@ -177,3 +177,11 @@ This is one promising but unvalidated fallback-B observation. Missing seek suppo
 References: [PlaybackState action constants](https://developer.android.com/reference/android/media/session/PlaybackState), [MediaSessionManager access requirements](https://developer.android.com/reference/android/media/session/MediaSessionManager#getActiveSessions(android.content.ComponentName)).
 
 No screen-capture/OCR fallback, media command, automated click, or audio manipulation was implemented. Fallback C is deferred while the lower-cost media-state lead remains unvalidated. Diagnostic app remains enabled and observation-only; manual tree dumps are one-shot, and no continuous ADB capture was left running.
+
+## Second user-confirmed ad — 2026-09-26
+
+User reported an ad after being asked to start another video. Immediate read-only media-session capture again showed official YouTube active=true, playback state=3, speed=1.0, supported actions=55 and empty custom actions. This repeats the first ad-time result (55), compared with the earlier user-confirmed normal-playback result (383).
+
+The associated manual tree at elapsedMs 1761951126 exposed 16 nodes, zero text labels/descriptions, zero click-action support and zero candidates, not truncated. No input, audio changes or screen capture were performed.
+
+This is two user-reported ad snapshots and one normal-playback snapshot, not a validated classifier. Whether Skip is visible during this second snapshot is pending user confirmation; the result must not be treated as evidence of Skip readiness. Live/unseekable content and transition false positives remain untested. Standalone media-session access is also unverified.
