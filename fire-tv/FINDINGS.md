@@ -3,7 +3,7 @@
 ## Current status after physical device tests — 2026-09-26
 
 - **WORKING:** Reproducible debug build and lint, installation and launch on Fire TV AFTSSS / API 28, approved accessibility binding, official YouTube foreground identification, bounded logs and manual tree dumps.
-- **PARTIALLY WORKING:** The diagnostic probe answers what this installed YouTube version exposes. Its active tree is accessible but has no useful ad/Skip controls. A media-action difference is observed once, not validated as an ad detector.
+- **PARTIALLY WORKING:** The diagnostic probe answers what this installed YouTube version exposes. Its active tree is accessible but has no useful ad/Skip controls. A media-action difference repeated across two ad/content pairs, but is not validated as an ad detector.
 - **NOT WORKING / NOT IMPLEMENTED:** Node-based auto-skip has no exposed target in tested captures; automatic clicking and audio suppression remain absent. No claim that ACTION_CLICK or clean muting works.
 - **NEEDS DEVICE TEST:** Repeated ad/content comparisons, non-skippable ads, countdown-to-Skip transitions, two-ad pods, live/unseekable content false positives, performance and reboot/sleep/restart survivability.
 
@@ -187,3 +187,18 @@ The associated manual tree at elapsedMs 1761951126 exposed 16 nodes, zero text l
 This is two user-reported ad snapshots and one normal-playback snapshot, not a validated classifier. Whether Skip is visible during this second snapshot is pending user confirmation; the result must not be treated as evidence of Skip readiness. Live/unseekable content and transition false positives remain untested. Standalone media-session access is also unverified.
 
 User subsequently confirmed Skip was visible on the second ad. A follow-up media-session capture still returned actions=55, custom actions empty, with the same playback-state update timestamp (1761915333). Thus no additional explicit Skip-ad command or readiness flag was observed at that moment. No before-Skip countdown sample was obtained, so this does not prove that the media state never changes when Skip appears. Next comparison: normal playback after this second ad ends.
+
+## Second post-skip comparison — 2026-09-26
+
+After the user reported pressing Skip, the official YouTube activity remained foreground. Its media session was active, playback state=3, speed=1.0, actions=383 and custom actions empty. The event-driven accessibility summary remained 16 nodes, zero candidates, not truncated.
+
+| Capture | User-reported state | Supported media actions | Explicit Skip-ad action |
+|---|---|---:|---|
+| First ad | Ad; later Skip visibly confirmed | 55 | None observed |
+| First content | Normal video playing | 383 | None observed |
+| Second ad | Ad; Skip visibly confirmed | 55 (also 55 on follow-up) | None observed |
+| Second post-skip | User pressed Skip | 383 | None observed |
+
+The media-action difference repeated across both pairs. This remains an unvalidated correlation, not an ad classification rule: live/unseekable playback, errors, transitions, non-skippable ads and countdown timing have not been tested. No direct evidence yet establishes standalone app access to these fields, Skip readiness or a safe activation target. No additional permissions or media controls were introduced.
+
+Current delivery limitation: the local `fire-tv-mvp` branch is committed. GitHub denied its push because the authenticated account Ferxxo-pa lacks write access to clawdez/slop-off; the connected GitHub API independently reported pull=true, push=false. No PR exists. Publication requires an authorized account with write access or a separately agreed contribution path. The diagnostic app remains observation-only, with no continuous ADB logging process running.
