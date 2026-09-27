@@ -36,11 +36,22 @@ internal class LocalTextReader(private val context: Context) {
             engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
             for (pass in 0..1) {
                 if (!valid()) break
-                val left = if (pass == 0) 0 else bitmap.width / 2
-                val top = if (pass == 0) 0 else bitmap.height / 2
-                val scale = if (pass == 0) 1 else 2
+                // Refine only one plausible full-frame label. A whole quadrant can
+                // group the tiny label with the countdown/icon and lose the word.
+                val anchor = if (pass == 1) words.singleOrNull {
+                    it.pass == 0 && it.label in setOf("skip", "skipad", "skipads") &&
+                        it.confidence >= 85f && it.left > bitmap.width * .78f && it.top > bitmap.height * .75f
+                } else null
+                if (pass == 1 && anchor == null) break
+                val left = if (pass == 0) 0 else (anchor!!.left - 6).coerceAtLeast(0)
+                val top = if (pass == 0) 0 else (anchor!!.top - 6).coerceAtLeast(0)
+                val right = if (pass == 0) bitmap.width else (anchor!!.right + 6).coerceAtMost(bitmap.width)
+                val bottom = if (pass == 0) bitmap.height else (anchor!!.bottom + 6).coerceAtMost(bitmap.height)
+                val scale = if (pass == 0) 1 else 4
+                engine.setPageSegMode(if (pass == 0) TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
+                    else TessBaseAPI.PageSegMode.PSM_SINGLE_WORD)
                 val input = if (pass == 0) bitmap else {
-                    val crop = Bitmap.createBitmap(bitmap, left, top, bitmap.width - left, bitmap.height - top)
+                    val crop = Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
                     try { Bitmap.createScaledBitmap(crop, crop.width * scale, crop.height * scale, true) }
                     finally { crop.recycle() }
                 }

@@ -1,6 +1,6 @@
 # Slop Off TV — physical-device experiment
 
-A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.7 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, but app-level Skip input and event behavior still need physical validation.
+A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.8 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, but app-level Skip input and event behavior still need physical validation.
 
 ## Current status
 
@@ -15,7 +15,7 @@ A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / 
 
 Accessibility-based node clicking is not viable in the observed YouTube version: both accessibility inspectors saw 16 unlabeled nodes with no real Skip action. ADB media-session actions correlate with ad/content transitions in limited observations, but do not prove Skip readiness. See [FINDINGS.md](FINDINGS.md) for evidence and limitations.
 
-## Reusable session (0.7)
+## Reusable session (0.7 and later)
 
 Start from the TV app's **Start protection session (experimental)** button. Existing sessions are reused without another screen-permission prompt. For the first setup, approve Accessibility and media access, then **Start now**. The foreground service keeps the grant until Stop, revocation, a crash/process stop, or eight hours. A new grant is required after the session ends. No frame reader or virtual display exists between requests, and no pixels are stored. This API-28 implementation is not validated for newer Android projection restrictions.
 
@@ -98,7 +98,7 @@ adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.CAPTURE_ONCE -n tv.slopo
 adb -s FIRE_TV_IP:5555 logcat -v brief SLOPOFF_CAPTURE:I SLOPOFF_TEXT:I SLOPOFF_INPUT:I '*:S'
 ```
 
-Only one request is accepted. A 1280x720 frame is processed in memory, capture stops before OCR, and two bounded passes inspect the full frame and an enlarged bottom-right region of that same frame. Only exact Skip/Sponsored tokens, positions, confidence, counts and timings are logged; images and other recognized text are not saved or uploaded. Only static model data is copied into private app storage. Capture expires after 12 seconds and recognition after a cooperative 30-second timeout; native cancellation is not a hard CPU deadline. There is no periodic screenshot or OCR loop.
+Only one request is accepted. A 1280x720 frame is processed in memory, capture stops before OCR, and two bounded passes inspect the full frame and, in 0.8, a tightly padded 4x crop around exactly one plausible Skip word. Both use that same frame. Only exact Skip/Sponsored tokens, positions, confidence, counts and timings are logged; images and other recognized text are not saved or uploaded. Only static model data is copied into private app storage. Capture expires after 12 seconds and recognition after a cooperative 30-second timeout; native cancellation is not a hard CPU deadline. There is no periodic screenshot or OCR loop.
 
 Cancel an armed or processing probe with:
 
