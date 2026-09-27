@@ -214,7 +214,24 @@ class CaptureSessionService : Service() {
                 finally { frame.close() }
                 releaseFrames()
                 if (bitmap == null) { finishFrame("Frame discarded", fromAutomatic); return@setOnImageAvailableListener }
-                log("frame_received", "copyMs=${SystemClock.elapsedRealtime() - capturedAt}")
+                val copyMs = SystemClock.elapsedRealtime() - capturedAt
+                // Aggregate readiness diagnostics only; never log or persist pixels.
+                var samples = 0; var nonblack = 0; var opaque = 0
+                for (y in 0 until bitmap.height step maxOf(1, bitmap.height / 18)) {
+                    for (x in 0 until bitmap.width step maxOf(1, bitmap.width / 32)) {
+                        val color = bitmap.getPixel(x, y)
+                        samples++
+                        if (maxOf((color ushr 16) and 255, (color ushr 8) and 255, color and 255) > 16) nonblack++
+                        if ((color ushr 24) == 255) opaque++
+                    }
+                }
+                log("frame_received", "copyMs=$copyMs samples=$samples nonblack=$nonblack opaque=$opaque")
+                if (nonblack == 0) {
+                    bitmap.recycle()
+                    previousEvidence = null
+                    finishFrame("Blank frame; no press", fromAutomatic)
+                    return@setOnImageAvailableListener
+                }
                 worker.post {
                     try {
                         val result = recognizer.read(bitmap) { !stopped && generation == token }

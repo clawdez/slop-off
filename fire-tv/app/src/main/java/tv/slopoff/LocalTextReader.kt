@@ -2,6 +2,10 @@ package tv.slopoff
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.media.Image
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
@@ -33,31 +37,32 @@ internal class LocalTextReader(private val context: Context) {
             synchronized(lock) { activeEngine = engine }
             val words = mutableListOf<VisualSkipGate.Word>()
             var inspected = 0
-            engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
-            for (pass in 0..1) {
-                if (!valid()) break
-                // Refine only one plausible full-frame label. A whole quadrant can
-                // group the tiny label with the countdown/icon and lose the word.
-                val anchor = if (pass == 1) words.singleOrNull {
-                    it.pass == 0 && it.label in setOf("skip", "skipad", "skipads") &&
-                        it.confidence >= 85f && it.left > bitmap.width * .78f && it.top > bitmap.height * .75f
-                } else null
-                if (pass == 1 && anchor == null) break
-                val left = if (pass == 0) 0 else (anchor!!.left - 6).coerceAtLeast(0)
-                val top = if (pass == 0) 0 else (anchor!!.top - 6).coerceAtLeast(0)
-                val right = if (pass == 0) bitmap.width else (anchor!!.right + 6).coerceAtMost(bitmap.width)
-                val bottom = if (pass == 0) bitmap.height else (anchor!!.bottom + 6).coerceAtMost(bitmap.height)
-                val scale = if (pass == 0) 1 else 4
-                engine.setPageSegMode(if (pass == 0) TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
-                    else TessBaseAPI.PageSegMode.PSM_SINGLE_WORD)
-                val input = if (pass == 0) bitmap else {
+            fun runPass(left: Int, top: Int, right: Int, bottom: Int, scale: Int,
+                mode: Int, pass: Int, invert: Boolean = false) {
+                if (!valid()) return
+                engine.setPageSegMode(mode)
+                var input = if (pass == 0) bitmap else {
                     val crop = Bitmap.createBitmap(bitmap, left, top, right - left, bottom - top)
                     try { Bitmap.createScaledBitmap(crop, crop.width * scale, crop.height * scale, true) }
                     finally { crop.recycle() }
                 }
                 try {
+                    if (invert) {
+                        val converted = Bitmap.createBitmap(input.width, input.height, Bitmap.Config.ARGB_8888)
+                        try {
+                            val matrix = ColorMatrix().apply {
+                                setSaturation(0f)
+                                postConcat(ColorMatrix(floatArrayOf(-1f,0f,0f,0f,255f,
+                                    0f,-1f,0f,0f,255f, 0f,0f,-1f,0f,255f, 0f,0f,0f,1f,0f)))
+                            }
+                            Canvas(converted).drawBitmap(input, 0f, 0f,
+                                Paint().apply { colorFilter = ColorMatrixColorFilter(matrix) })
+                        } catch (e: Exception) { converted.recycle(); throw e }
+                        if (input !== bitmap) input.recycle()
+                        input = converted
+                    }
                     engine.setImage(input)
-                    if (!valid()) break
+                    if (!valid()) return
                     engine.getUTF8Text()
                     val level = TessBaseAPI.PageIteratorLevel.RIL_WORD
                     val iterator = engine.resultIterator
@@ -65,9 +70,9 @@ internal class LocalTextReader(private val context: Context) {
                         iterator.begin()
                         do {
                             if (!valid()) break
-                            inspected++
                             val label = iterator.getUTF8Text(level)?.trim()?.lowercase(Locale.ROOT)
                                 ?.trim { !it.isLetter() }.orEmpty()
+                            if (label.isNotEmpty()) inspected++
                             if (label in setOf("skip", "skipad", "skipads", "sponsored")) {
                                 val b = iterator.getBoundingBox(level)
                                 words.add(VisualSkipGate.Word(label, iterator.confidence(level), pass,
@@ -77,6 +82,38 @@ internal class LocalTextReader(private val context: Context) {
                         } while (iterator.next(level))
                     }
                 } finally { if (input !== bitmap) input.recycle() }
+            }
+            runPass(0, 0, bitmap.width, bitmap.height, 1, TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT, 0)
+            fun primaryLabels() = words.filter {
+                it.pass in setOf(0, 2, 3) && it.label in setOf("skip", "skipad", "skipads") &&
+                    it.confidence >= 90f && it.left > bitmap.width * .78f && it.top > bitmap.height * .75f
+            }
+            val hasAdMarker = words.any { it.pass == 0 && it.label == "sponsored" &&
+                it.confidence >= 90f && it.right < bitmap.width * .5f && it.top > bitmap.height * .75f }
+            // A full-frame miss must not prevent looking in the observed control area.
+            // At most two small regional passes; no extra screen capture is performed.
+            if (hasAdMarker && primaryLabels().isEmpty()) {
+                val left = (bitmap.width * .76f).toInt()
+                val top = (bitmap.height * .77f).toInt()
+                val right = (bitmap.width * .99f).toInt()
+                val bottom = (bitmap.height * .96f).toInt()
+                runPass(left, top, right, bottom, 3, TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT, 2)
+                if (primaryLabels().isEmpty())
+                    runPass(left, top, right, bottom, 3, TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK, 3, true)
+            }
+            val anchor = primaryLabels().singleOrNull()
+            if (anchor != null) {
+                runPass((anchor.left - 6).coerceAtLeast(0), (anchor.top - 6).coerceAtLeast(0),
+                    (anchor.right + 6).coerceAtMost(bitmap.width), (anchor.bottom + 6).coerceAtMost(bitmap.height),
+                    4, TessBaseAPI.PageSegMode.PSM_SINGLE_WORD, 1)
+                // A tiny crop can harm segmentation even when the main read is strong.
+                // Recheck the original region with surrounding button context; do not
+                // accept the weak close-up or lower any confidence requirement.
+                if (words.none { it.pass == 1 && it.label == anchor.label && it.confidence >= 85f }) {
+                    runPass((bitmap.width * .76f).toInt(), (bitmap.height * .77f).toInt(),
+                        (bitmap.width * .99f).toInt(), (bitmap.height * .96f).toInt(),
+                        2, TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT, 4)
+                }
             }
             return Result(words, inspected)
         } finally { synchronized(lock) { activeEngine = null; engine.recycle() } }

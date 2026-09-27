@@ -26,9 +26,13 @@ internal object VisualSkipGate {
             it.confidence >= 80f && it.left > width * .78f && it.top > height * .75f &&
             it.bottom < height * .96f && it.right - it.left < width * .12f &&
             it.bottom - it.top < height * .08f }
-        val full = skips.singleOrNull { it.pass == 0 } ?: return null
-        val crop = skips.singleOrNull { it.pass == 1 } ?: return null
-        if (full.confidence < 90f || !matching(full, crop, 8)) return null
+        // Regional discovery may supply the primary Skip reading when full-frame
+        // layout analysis misses it. Sponsored must still come from the full frame.
+        val full = skips.singleOrNull { it.pass in setOf(0, 2, 3) && it.confidence >= 90f } ?: return null
+        val confirmations = skips.filter { it.pass in setOf(1, 4) }
+        if (confirmations.groupBy { it.pass }.values.any { it.size > 1 } ||
+            confirmations.any { !matching(full, it, 8) }) return null
+        val crop = confirmations.maxByOrNull { it.confidence } ?: return null
         return full to crop
     }
 
@@ -41,7 +45,7 @@ internal object VisualSkipGate {
         if (now - current.capturedAt !in 0..7_500) return null
         val (full, crop) = readings(current) ?: return null
         // A borderline close-up needs a separate recent capture of the same target.
-        // Main-frame Skip and Sponsored confidence must be >=90 in BOTH captures.
+        // Primary Skip and full-frame Sponsored must be >=90 in BOTH captures.
         if (crop.confidence < 85f) {
             val prior = previous ?: return null
             if (prior.width != current.width || prior.height != current.height ||

@@ -61,4 +61,35 @@ class VisualSkipGateTest {
         }
         assertNull(VisualSkipGate.target(frame(borderline, 8000), 11_000, frame(listOf(full, crop), 1000)))
     }
+    @Test fun regionalSkipStillNeedsFullFrameAdEvidenceAndIndependentRefinement() {
+        assertNotNull(target(listOf(ad, full.copy(pass = 2), crop)))
+        assertNotNull(target(listOf(ad, full.copy(pass = 3), crop)))
+        assertNull(target(listOf(ad.copy(pass = 2), full.copy(pass = 2), crop)))
+        assertNull(target(listOf(ad, full.copy(pass = 2))))
+    }
+    @Test fun regionalDiscoveryCannotResolveConflictingStrongTargetsByChoosingOne() {
+        assertNull(target(evidence + full.copy(pass = 2, left = 1160, right = 1190)))
+        assertNull(target(listOf(ad, full.copy(pass = 2), full.copy(pass = 3), crop)))
+    }
+    @Test fun borderlineRegionalSkipStillRequiresTwoRecentFrames() {
+        val regional = listOf(ad, full.copy(pass = 2), crop.copy(confidence = 82f))
+        assertNull(VisualSkipGate.target(frame(regional, 8000), 11_000))
+        assertNotNull(VisualSkipGate.target(frame(regional, 8000), 11_000, frame(regional, 1000)))
+        assertNull(target(listOf(ad, full.copy(pass = 2, confidence = 89f), crop)))
+    }
+    @Test fun contextualConfirmationCanReplaceAWeakTightCropWithoutLoweringThresholds() {
+        val weak = crop.copy(confidence = 51.61788f)
+        assertNull(target(listOf(ad, full, weak)))
+        assertNotNull(target(listOf(ad, full, weak, crop.copy(pass = 4))))
+        assertNull(target(listOf(ad, full, weak, crop.copy(pass = 4, confidence = 79f))))
+    }
+    @Test fun conflictingOrAmbiguousContextualReadingsAreRejected() {
+        assertNull(target(evidence + crop.copy(pass = 4, left = 1160, right = 1190)))
+        assertNull(target(listOf(ad, full, crop.copy(pass = 4), crop.copy(pass = 4))))
+    }
+    @Test fun contextualBorderlineStillNeedsSeparateRecentEvidence() {
+        val words = listOf(ad, full, crop.copy(pass = 4, confidence = 82f))
+        assertNull(VisualSkipGate.target(frame(words, 8000), 11_000))
+        assertNotNull(VisualSkipGate.target(frame(words, 8000), 11_000, frame(words, 1000)))
+    }
 }
