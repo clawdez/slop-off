@@ -80,14 +80,18 @@ class DiagnosticService : AccessibilityService() {
     fun requestDump() { if (enabled && ::worker.isInitialized) worker.post { inspect(true) } }
 
     // The active consent session supplies fresh visual evidence; never accepts raw coordinates.
-    internal fun testVisualSkip(words: List<VisualSkipGate.Word>, width: Int, height: Int,
-        capturedAt: Long, expectedWindow: Int, expectedEpoch: Long, done: (String) -> Unit) {
+    internal fun testVisualSkip(frame: VisualSkipGate.Frame, previous: VisualSkipGate.Frame?, done: (String) -> Unit) {
+        val width = frame.width
+        val height = frame.height
+        val capturedAt = frame.capturedAt
+        val expectedWindow = frame.window
+        val expectedEpoch = frame.windowEpoch
         val now = SystemClock.elapsedRealtime()
         if (!enabled || windowEpoch != expectedEpoch || now - lastTestTap < 10_000 ||
             !(getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive) {
             done("gesture_guard_rejected"); return
         }
-        val point = VisualSkipGate.target(words, width, height, now - capturedAt)
+        val point = VisualSkipGate.target(frame, now, previous)
         if (point == null) { done("visual_gate_rejected"); return }
         try {
             val size = Point()

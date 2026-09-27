@@ -41,6 +41,8 @@ class CaptureSessionService : Service() {
     private var automatic = false
     private var candidate = false
     private var wasYoutube = false
+    private var evidenceEpisode = 0L
+    private var previousEvidence: VisualSkipGate.Frame? = null
     private val budget = ScanBudget()
     private var controller: MediaController? = null
     private var mediaRegistered = false
@@ -165,12 +167,14 @@ class CaptureSessionService : Service() {
     }
 
     private fun startBurst() {
+        evidenceEpisode++; previousEvidence = null
         budget.begin(SystemClock.elapsedRealtime())
         main.removeCallbacks(scanTask)
         main.postDelayed(scanTask, 600)
     }
 
     private fun cancelBurst() {
+        evidenceEpisode++; previousEvidence = null
         budget.stop(); main.removeCallbacks(scanTask)
         generation++ // In-flight evidence becomes invalid.
     }
@@ -191,8 +195,10 @@ class CaptureSessionService : Service() {
         busy = true
         val token = ++generation
         val epoch = DiagnosticService.windowEpoch
+        val episode = evidenceEpisode
         val inputAllowed = fromAutomatic || allowManualInput
         update("Checking ad controls locally")
+        log("check_trigger", if (fromAutomatic) "automatic" else "manual")
         main.postDelayed(timeout, 30_000)
         try {
             val source = ImageReader.newInstance(1280, 720, PixelFormat.RGBA_8888, 2)
@@ -221,15 +227,23 @@ class CaptureSessionService : Service() {
                                 .put("bounds", JSONArray(listOf(w.left, w.top, w.right, w.bottom)))) }
                             Log.i("SLOPOFF_TEXT", JSONObject().put("result", "recognized").put("ageMs", age)
                                 .put("wordsInspected", result.inspected).put("candidates", words).toString())
-                            if (generation != token || youtubeWindow() != window || DiagnosticService.windowEpoch != epoch ||
+                            if (generation != token || evidenceEpisode != episode || youtubeWindow() != window || DiagnosticService.windowEpoch != epoch ||
                                 (fromAutomatic && (!automatic || !candidate || !mediaRegistered))) {
+                                previousEvidence = null
                                 finishFrame("Screen or playback changed; no press", fromAutomatic)
                             } else if (inputAllowed) {
+                                val evidence = VisualSkipGate.Frame(result.words.toList(), 1280, 720, capturedAt, window, epoch, episode)
+                                val previous = previousEvidence
+                                previousEvidence = evidence
                                 val service = DiagnosticService.instance
                                 if (service == null) finishFrame("Accessibility disconnected", fromAutomatic)
-                                else service.testVisualSkip(result.words, 1280, 720, capturedAt, window, epoch) { outcome ->
-                                    if (outcome == "gesture_completed_unverified") budget.stop()
-                                    finishFrame(outcome, fromAutomatic)
+                                else service.testVisualSkip(evidence, previous) { outcome ->
+                                    if (outcome == "gesture_completed_unverified") {
+                                        budget.stop(); previousEvidence = null
+                                    }
+                                    val confirmSoon = outcome == "visual_gate_rejected" &&
+                                        VisualSkipGate.needsSecondFrame(evidence, SystemClock.elapsedRealtime())
+                                    finishFrame(outcome, fromAutomatic, if (confirmSoon) 1_000 else 4_000)
                                 }
                             } else finishFrame("Observation complete; no press", false)
                         }
@@ -243,7 +257,7 @@ class CaptureSessionService : Service() {
         } catch (e: Exception) { releaseFrames(); finishFrame("Capture error: ${e.javaClass.simpleName}", fromAutomatic) }
     }
 
-    private fun finishFrame(outcome: String, fromAutomatic: Boolean) {
+    private fun finishFrame(outcome: String, fromAutomatic: Boolean, nextDelayMs: Long = 4_000) {
         if (stopped) return
         main.removeCallbacks(timeout)
         busy = false
@@ -252,7 +266,7 @@ class CaptureSessionService : Service() {
         if (!keepAlive) shutdown(outcome)
         else if (fromAutomatic && automatic && candidate) {
             main.removeCallbacks(scanTask)
-            main.postDelayed(scanTask, 4_000)
+            main.postDelayed(scanTask, nextDelayMs)
         }
     }
 
@@ -268,6 +282,7 @@ class CaptureSessionService : Service() {
     }
 
     private fun update(message: String) {
+        if (status == message) return
         status = message; DiagnosticService.lastEvent = message; DiagnosticService.uiRefresh?.invoke()
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1, notification(message))
         log("state", message)
@@ -284,6 +299,7 @@ class CaptureSessionService : Service() {
     fun shutdown(reason: String = "Stopped") {
         if (stopped) return
         stopped = true; generation++
+        previousEvidence = null
         main.removeCallbacksAndMessages(null)
         recognizer.cancel(); releaseFrames()
         controller?.unregisterCallback(mediaCallback); controller = null

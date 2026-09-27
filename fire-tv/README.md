@@ -1,6 +1,6 @@
 # Slop Off TV — physical-device experiment
 
-A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.8 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, App-driven Skip has been confirmed once on the physical device; event-driven automatic behavior still needs verification.
+A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.9 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, App-driven Skip has been confirmed once; automatic triggering was observed but a later ad failed its confidence gate. The 0.9 decision fix needs device validation.
 
 ## Current status
 
@@ -46,7 +46,7 @@ adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.ENABLE_AUTOMATIC -n tv.s
 adb -s FIRE_TV_IP:5555 logcat -v brief SLOPOFF_SESSION:I SLOPOFF_TEXT:I SLOPOFF_INPUT:I '*:S'
 ```
 
-Only observed transport action values 53/55 initiate candidate checks. They are not proof of an ad. Each candidate burst permits at most six scans over 45 seconds, spaced four seconds after completion, with at most twelve automatic attempts per minute across all events. The ad/button visual gate remains mandatory. Normal content, app switching, missing access, disabled diagnostics and stale windows invalidate pending evidence. There is no idle screenshot/OCR timer. Missing or different transport flags, delayed Skip, unfamiliar layouts and false-positive rates need further tests. A stop action is available in the app and session notification. The system FOREGROUND_SERVICE permission is added; network/storage/audio permissions are absent.
+Only observed transport action values 53/55 initiate candidate checks. They are not proof of an ad. Each candidate burst permits at most six scans over 45 seconds, spaced four seconds after completion (one second for a valid borderline candidate needing temporal confirmation), with at most twelve automatic attempts per minute across all events. The ad/button visual gate remains mandatory. Normal content, app switching, missing access, disabled diagnostics and stale windows invalidate pending evidence. There is no idle screenshot/OCR timer. Missing or different transport flags, delayed Skip, unfamiliar layouts and false-positive rates need further tests. A stop action is available in the app and session notification. The system FOREGROUND_SERVICE permission is added; network/storage/audio permissions are absent.
 
 ## Build
 
@@ -130,3 +130,9 @@ No retries occur. The normal capture command never enables input. These guards r
 Prove app-driven input, then find a permission-compatible event trigger that avoids continuous capture/OCR. Validate normal content, live content, non-skippable ads, two-ad pods and repeated skippable ads before enabling any autonomous behavior. After that, test reboot, sleep/wake, app switching, process restarts and a long session. Audio suppression stays separate; this app never alters volume or mute state.
 
 Reference: [Android accessibility gesture API](https://developer.android.com/reference/android/accessibilityservice/AccessibilityService#dispatchGesture(android.accessibilityservice.GestureDescription,%20android.accessibilityservice.AccessibilityService.GestureResultCallback,%20android.os.Handler)).
+
+## Confidence handling (0.9)
+
+Both the main-frame Skip and lower-left Sponsored marker must score at least 90. A matching close-up at 85 or above qualifies through the fresh-frame gate. A close-up between 80 and 85 requires another separate recent frame with the same strong ad/main-label evidence and matching target coordinates. The prior frame must be at most twelve seconds old, at least 500 ms earlier, and belong to the same playback episode/window/window-event generation and capture dimensions. Current evidence remains limited to 7.5 seconds. Confidence is an OCR score, not a measured probability of correctness. Repeated-frame confirmation still needs normal-content and false-positive validation.
+
+For testing, install updates first, start the retained session and approve Start now while YouTube is on its home screen, then start playback. Do not reopen the consent activity during an ad. Further tests and automatic checks reuse that grant until the session ends. APK replacement or a process/session restart requires a new grant; the app does not bypass Android's consent prompt.
