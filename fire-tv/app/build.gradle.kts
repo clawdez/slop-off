@@ -13,8 +13,8 @@ android {
         minSdk = 28
         targetSdk = 28
         ndk { abiFilters += "armeabi-v7a" }
-        versionCode = 11
-        versionName = "0.11-context-confirmation"
+        versionCode = 12
+        versionName = "0.12-capture-settle"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

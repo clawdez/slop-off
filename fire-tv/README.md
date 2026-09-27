@@ -1,6 +1,6 @@
 # Slop Off TV — physical-device experiment
 
-A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.11 is experimental, not a production release.** It runs bounded automatic checks after explicit session startup and required permissions. App-driven Skip has been confirmed once; later automatic checks missed visible buttons. Version 0.11 adds contextual confirmation for weak tight-crop readings; reliable unattended skipping still needs device validation.
+A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.12 is experimental, not a production release.** It runs bounded automatic checks after explicit session startup and required permissions. App-driven Skip has been confirmed once; later automatic checks missed visible buttons. Version 0.12 adds a bounded capture-settling experiment after another visible-Skip miss. Reliable unattended skipping still needs device validation.
 
 ## Current status
 
@@ -10,7 +10,7 @@ A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / 
 | Working in controlled tests | ADB targeting and then the app's own guarded accessibility gesture each skipped an ad; the user confirmed playback resumed |
 | Working on the tested device | Repeated captures reuse one foreground session without another consent popup; natural ad events started bounded automatic checks |
 | Partially working | Automatic skipping: visible buttons have been missed by full-frame recognition or rejected by the refinement confidence gate |
-| Needs device test | Version 0.11 contextual confirmation, repeated unattended skips, normal/live-content refusal, non-skippable ads, pods and lifecycle behavior |
+| Needs device test | Version 0.12 capture timing, repeated unattended skips, normal/live-content refusal, non-skippable ads, pods and lifecycle behavior |
 | Not implemented | Audio suppression, automatic recovery of screen permission after process death or reboot |
 
 Accessibility-based node clicking is not viable in the observed YouTube version: both accessibility inspectors saw 16 unlabeled nodes with no real Skip action. ADB media-session actions correlate with ad/content transitions in limited observations, but do not prove Skip readiness. See [FINDINGS.md](FINDINGS.md) for evidence and limitations.
@@ -148,3 +148,9 @@ After the system consent result, the setup activity consumes confirmation keys f
 A strong primary reading can be followed by a poor tight-word score on a real button. Version 0.11 then rereads the bottom-right control region at 2x scale (pass 4), preserving surrounding context. This fallback must meet the existing confidence and coordinate requirements; it does not authorize a low-confidence word. Qualifying but conflicting or ambiguous confirmation readings are rejected. Borderline confirmation still needs a separate matching recent frame. There are at most five OCR passes on the same capture; freshness limits and scan budgets are unchanged.
 
 Frame diagnostics report only aggregate sample counts for brightness and opacity. A frame whose samples are all black is discarded without OCR or input. These counts cannot confirm that a frame contains the correct screen; the visual and foreground gates remain mandatory. Empty OCR iterator entries no longer count as recognized words. Images are never saved by the app.
+
+## Bounded capture settling (0.12)
+
+After creating a temporary mirrored display, the app waits 300 ms before acquiring its latest queued image. The reader/display is released immediately after that single acquisition; OCR counts and burst limits are unchanged. A one-time delayed acquisition also handles paused scenes that do not emit another image callback. Stale callbacks from a stopped or superseded reader are ignored. The 7.5-second evidence age now starts at the original request, so capture startup and settling consume the freshness budget.
+
+This is a device experiment for repeated zero-word frames despite a user-visible Skip control. Incomplete initial composition is a hypothesis, not an established cause. No confidence threshold was lowered and no input fallback was added. Physical validation is required.

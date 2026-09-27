@@ -196,6 +196,7 @@ class CaptureSessionService : Service() {
         val token = ++generation
         val epoch = DiagnosticService.windowEpoch
         val episode = evidenceEpisode
+        val requestedAt = SystemClock.elapsedRealtime()
         val inputAllowed = fromAutomatic || allowManualInput
         update("Checking ad controls locally")
         log("check_trigger", if (fromAutomatic) "automatic" else "manual")
@@ -203,18 +204,24 @@ class CaptureSessionService : Service() {
         try {
             val source = ImageReader.newInstance(1280, 720, PixelFormat.RGBA_8888, 2)
             reader = source
-            source.setOnImageAvailableListener({ images ->
-                if (stopped || reader !== images) return@setOnImageAvailableListener
-                val frame = images.acquireLatestImage() ?: return@setOnImageAvailableListener
-                val capturedAt = SystemClock.elapsedRealtime()
+            val readyAt = SystemClock.elapsedRealtime() + 300
+            // A newly mirrored display may deliver an incomplete initial composition.
+            // Allow a bounded settling period and consume only the latest queued frame.
+            val onImage = ImageReader.OnImageAvailableListener frameReady@ { images ->
+                if (stopped || reader !== images || SystemClock.elapsedRealtime() < readyAt) return@frameReady
+                val frame = images.acquireLatestImage() ?: return@frameReady
+                val acquiredAt = SystemClock.elapsedRealtime()
+                // Count settling/acquisition time against freshness, never refresh the
+                // age of a frame that may have been queued before this callback.
+                val capturedAt = requestedAt
                 val bitmap = try {
                     if (generation != token || youtubeWindow() != window || DiagnosticService.windowEpoch != epoch) null
                     else LocalTextReader.bitmap(frame)
                 } catch (e: Exception) { log("frame_error", e.javaClass.simpleName); null }
                 finally { frame.close() }
                 releaseFrames()
-                if (bitmap == null) { finishFrame("Frame discarded", fromAutomatic); return@setOnImageAvailableListener }
-                val copyMs = SystemClock.elapsedRealtime() - capturedAt
+                if (bitmap == null) { finishFrame("Frame discarded", fromAutomatic); return@frameReady }
+                val copyMs = SystemClock.elapsedRealtime() - acquiredAt
                 // Aggregate readiness diagnostics only; never log or persist pixels.
                 var samples = 0; var nonblack = 0; var opaque = 0
                 for (y in 0 until bitmap.height step maxOf(1, bitmap.height / 18)) {
@@ -225,12 +232,12 @@ class CaptureSessionService : Service() {
                         if ((color ushr 24) == 255) opaque++
                     }
                 }
-                log("frame_received", "copyMs=$copyMs samples=$samples nonblack=$nonblack opaque=$opaque")
+                log("frame_received", "copyMs=$copyMs captureWaitMs=${acquiredAt - capturedAt} samples=$samples nonblack=$nonblack opaque=$opaque")
                 if (nonblack == 0) {
                     bitmap.recycle()
                     previousEvidence = null
                     finishFrame("Blank frame; no press", fromAutomatic)
-                    return@setOnImageAvailableListener
+                    return@frameReady
                 }
                 worker.post {
                     try {
@@ -268,9 +275,12 @@ class CaptureSessionService : Service() {
                     catch (e: LinkageError) { main.post { shutdown("Text engine unavailable") } }
                     finally { bitmap.recycle() }
                 }
-            }, main)
+            }
+            source.setOnImageAvailableListener(onImage, main)
             display = projection!!.createVirtualDisplay("SlopOff-requested-frame", 1280, 720,
                 resources.displayMetrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, source.surface, null, main)
+            // A paused scene may emit no new callback after the settling deadline.
+            main.postDelayed({ onImage.onImageAvailable(source) }, 300)
         } catch (e: Exception) { releaseFrames(); finishFrame("Capture error: ${e.javaClass.simpleName}", fromAutomatic) }
     }
 
