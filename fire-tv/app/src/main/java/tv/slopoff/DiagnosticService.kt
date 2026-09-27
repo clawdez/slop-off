@@ -1,7 +1,10 @@
 package tv.slopoff
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Context
+import android.graphics.Path
+import android.graphics.Point
 import android.graphics.Rect
 import android.os.Handler
 import android.os.HandlerThread
@@ -9,6 +12,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.WindowManager
 import org.json.JSONObject
 import java.util.Locale
 
@@ -18,6 +22,7 @@ class DiagnosticService : AccessibilityService() {
         @Volatile var foreground = "UNKNOWN"
         @Volatile var lastEvent = "Waiting for accessibility"
         @Volatile var uiRefresh: (() -> Unit)? = null
+        @Volatile var windowEpoch = 0L
         // Verify the installed official package on the physical Fire TV before testing.
         val youtubePackages = setOf("com.amazon.firetv.youtube", "com.google.android.youtube.tv")
     }
@@ -30,6 +35,7 @@ class DiagnosticService : AccessibilityService() {
     private val contentEvents = java.util.concurrent.atomic.AtomicInteger()
     private val windowEvents = java.util.concurrent.atomic.AtomicInteger()
     private var lastDump = -5000L
+    private var lastTestTap = -10_000L
     private val recent = linkedMapOf<String, Long>()
     private val queued = java.util.concurrent.atomic.AtomicBoolean(false)
     private val scan = Runnable { queued.set(false); inspect(false) }
@@ -54,6 +60,7 @@ class DiagnosticService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!enabled || event == null || !::worker.isInitialized) return
         val type = event.eventType
+        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) windowEpoch++
         if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && event.packageName?.toString() !in youtubePackages) return
         if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) contentEvents.incrementAndGet() else windowEvents.incrementAndGet()
         schedule()
@@ -66,6 +73,41 @@ class DiagnosticService : AccessibilityService() {
         schedule()
     }
     fun requestDump() { if (enabled && ::worker.isInitialized) worker.post { inspect(true) } }
+
+    // Called only by the shell-protected one-shot probe after its visual gate passes.
+    // No timer, event handler, or persistent setting can invoke input on its own.
+    internal fun testVisualSkip(words: List<VisualSkipGate.Word>, width: Int, height: Int,
+        capturedAt: Long, expectedWindow: Int, expectedEpoch: Long, done: (String) -> Unit) {
+        val now = SystemClock.elapsedRealtime()
+        if (!enabled || windowEpoch != expectedEpoch || now - lastTestTap < 10_000) {
+            done("gesture_guard_rejected"); return
+        }
+        val point = VisualSkipGate.target(words, width, height, now - capturedAt)
+        if (point == null) { done("visual_gate_rejected"); return }
+        try {
+            val size = Point()
+            (getSystemService(WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealSize(size)
+            if (size.x <= size.y || kotlin.math.abs(size.x.toFloat() / size.y - width.toFloat() / height) > .01f) {
+                done("display_geometry_changed"); return
+            }
+            val root = rootInActiveWindow
+            if (root == null) { done("foreground_unavailable"); return }
+            val allowed = try { root.packageName?.toString() in youtubePackages && root.windowId == expectedWindow }
+                finally { root.recycle() }
+            if (!allowed || windowEpoch != expectedEpoch || SystemClock.elapsedRealtime() - capturedAt > 7_500) {
+                done("foreground_or_frame_changed"); return
+            }
+            val path = Path().apply { moveTo(point.x * size.x / width, point.y * size.y / height) }
+            val gesture = GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, 50)).build()
+            lastTestTap = now // Debounce attempts too; no retry after cancellation.
+            val accepted = dispatchGesture(gesture, object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription) { done("gesture_completed_unverified") }
+                override fun onCancelled(gestureDescription: GestureDescription) { done("gesture_cancelled") }
+            }, null)
+            report("SLOPOFF_INPUT", JSONObject().put("testRequested", true).put("accepted", accepted))
+            if (!accepted) done("gesture_dispatch_rejected")
+        } catch (e: Exception) { done("gesture_error_${e.javaClass.simpleName}") }
+    }
     private fun report(tag: String, data: JSONObject) {
         Log.i(tag, data.put("elapsedMs", SystemClock.elapsedRealtime()).toString())
     }

@@ -38,7 +38,7 @@ class MainActivity : Activity() {
             render()
         }
         layout.addView(TextView(this).apply {
-            text = "Setup: enable Slop Off TV diagnostics in Accessibility.\nDiagnostics only: automatic skipping and muting are not implemented."
+            text = "Setup: enable Slop Off TV diagnostics in Accessibility.\nAutomatic protection is not active. A developer-requested one-shot Skip test is available. Audio stays unchanged."
             textSize = 16f
         })
         setContentView(layout)

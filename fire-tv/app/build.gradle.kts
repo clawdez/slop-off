@@ -13,8 +13,8 @@ android {
         minSdk = 28
         targetSdk = 28
         ndk { abiFilters += "armeabi-v7a" }
-        versionCode = 5
-        versionName = "0.5-local-word-probe"
+        versionCode = 6
+        versionName = "0.6-one-shot-skip-test"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -23,4 +23,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 
-dependencies { implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0") }
+dependencies {
+    implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0")
+    testImplementation("junit:junit:4.13.2")
+}

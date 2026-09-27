@@ -43,11 +43,18 @@ class CaptureProbeActivity : Activity() {
     private var processingText = false
     private var armedRequestStarted = false
     private var deadline = 0L
+    private var capturedAt = 0L
+    private var capturedWindow = -1
+    private var capturedEpoch = -1L
+    private var testSkip = false
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        testSkip = intent.getBooleanExtra("armed", false) && intent.getBooleanExtra("test_skip", false)
         setContentView(TextView(this).apply {
-            text = "SLOP OFF — CAPTURE FEASIBILITY TEST\n\nOne frame, local text recognition. No image or screen text saved or uploaded.\nNo clicking or audio changes. Returns to YouTube after consent."
+            text = "SLOP OFF — ONE-FRAME TEST\n\nLocal text recognition. No image or screen text saved or uploaded.\n" +
+                (if (testSkip) "One Skip press allowed after an explicit test request and matching ad/button checks." else "Observation only. No clicking.") +
+                "\nNo audio changes. Returns to YouTube after consent."
             textSize = 24f
             setPadding(48, 40, 48, 40)
         })
@@ -123,7 +130,15 @@ class CaptureProbeActivity : Activity() {
         try {
             val frame = source.acquireLatestImage() ?: return
             try {
-                if (!youtubeIsActive()) { complete("foreground_changed"); return }
+                val root = DiagnosticService.instance?.rootInActiveWindow
+                if (root == null) { complete("foreground_unavailable"); return }
+                val allowed = try {
+                    capturedWindow = root.windowId
+                    capturedEpoch = DiagnosticService.windowEpoch
+                    root.packageName?.toString() in DiagnosticService.youtubePackages
+                } finally { root.recycle() }
+                if (!allowed) { complete("foreground_changed"); return }
+                capturedAt = SystemClock.elapsedRealtime()
                 val plane = frame.planes[0]
                 val bytes = plane.buffer
                 val pixels = IntArray(frame.width * frame.height)
@@ -177,6 +192,7 @@ class CaptureProbeActivity : Activity() {
                 if (finished) return@Thread
                 engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
                 val candidates = org.json.JSONArray()
+                val evidence = mutableListOf<VisualSkipGate.Word>()
                 var words = 0
                 // Two bounded passes over ONE frame. Word matching avoids requiring
                 // nearby countdown text or button icons to form an exact whole line.
@@ -203,13 +219,15 @@ class CaptureProbeActivity : Activity() {
                                 words++
                                 val normalized = iterator.getUTF8Text(level)?.trim()
                                     ?.lowercase(Locale.ROOT)?.trim { !it.isLetter() }.orEmpty()
-                                if (normalized in setOf("skip", "skipad", "skipads")) {
+                                if (normalized in setOf("skip", "skipad", "skipads", "sponsored")) {
                                     val box = iterator.getBoundingBox(level)
                                     val mapped = listOf(box[0] / scale + left, box[1] / scale + top,
                                         box[2] / scale + left, box[3] / scale + top)
                                     candidates.put(JSONObject().put("label", normalized)
                                         .put("pass", pass).put("confidence", iterator.confidence(level))
                                         .put("bounds", org.json.JSONArray(mapped)))
+                                    evidence.add(VisualSkipGate.Word(normalized, iterator.confidence(level), pass,
+                                        mapped[0], mapped[1], mapped[2], mapped[3]))
                                 }
                             } while (iterator.next(level))
                         }
@@ -219,11 +237,18 @@ class CaptureProbeActivity : Activity() {
                     .put("frameHeight", bitmap.height).put("wordsInspected", words)
                     .put("candidates", candidates).put("durationMs", SystemClock.elapsedRealtime() - started)
                     .put("elapsedMs", SystemClock.elapsedRealtime())
+                val frameWidth = bitmap.width
+                val frameHeight = bitmap.height
                 handler.post {
                     if (!finished) {
                         if (youtubeIsActive()) {
                             Log.i("SLOPOFF_TEXT", result.toString())
-                            complete("complete")
+                            if (testSkip) {
+                                val service = DiagnosticService.instance
+                                if (service == null) complete("service_unavailable")
+                                else service.testVisualSkip(evidence, frameWidth, frameHeight,
+                                    capturedAt, capturedWindow, capturedEpoch) { complete(it) }
+                            } else complete("complete")
                         } else complete("foreground_changed")
                     }
                 }
@@ -252,7 +277,7 @@ class CaptureProbeActivity : Activity() {
 
     private fun release() {
         if (finished) synchronized(engineLock) { textEngine?.stop() }
-        if (armedInstance?.get() === this) armedInstance = null
+        if (finished && armedInstance?.get() === this) armedInstance = null
         handler.removeCallbacksAndMessages(null)
         display?.release(); display = null
         reader?.close(); reader = null

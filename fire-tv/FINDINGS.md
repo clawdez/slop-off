@@ -253,3 +253,13 @@ The user currently reports a paused ad with a visible Skip button, which provide
 
 The user supplied a photo showing paused YouTube with a bottom-right Skip label, adjacent icon and countdown. The 0.4 whole-line comparison could reject labels grouped with adjacent UI. Version 0.5 compares exact normalized words (Skip, Skipad, Skipads), with coordinates and confidence, in two bounded OCR passes: full frame and doubled bottom-right quadrant. Both passes use the same one captured frame; no periodic capture or input is added. A word match remains diagnostic, not proof of a clickable ad button. Device validation pending.
 
+
+## 0.5 recognition and controlled ADB Skip success
+
+At elapsedMs 1783188446, the user confirmed a paused ad with Skip visible. One 1280x720 frame produced 37 inspected words across two passes in 3523 ms. Full-frame Skip: confidence 92.03494, bounds [1096,630,1125,645]. Enlarged region: confidence 93.08898, mapped bounds [1095,630,1125,645]. No image saved. Projection was subsequently null.
+
+The display was 1920x1080. Official YouTube remained foreground, with paused media state 2 at position 6187 and actions 53. After rechecking foreground and that paused position, a single ADB tap at (1665,956) was issued. YouTube changed to playing state 3 near position 167 with actions 383. The user explicitly confirmed that the ad skipped and regular video resumed. This proves one controlled ADB coordinate input worked; it does NOT yet prove app-level accessibility gesture delivery or unattended detection.
+
+## 0.6 one-shot app input experiment
+
+Adds gesture capability only for an explicitly armed shell-protected test, with matching two-pass Skip positions, lower-left Sponsored evidence, confidence/geometry/freshness guards, same YouTube window and window-event generation, and a ten-second attempt debounce. Ordinary capture is observation-only. No recurring trigger, input retries or audio control. Physical gesture validation pending.
