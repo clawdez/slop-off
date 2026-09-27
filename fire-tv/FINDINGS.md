@@ -235,3 +235,16 @@ A capture requested after the user reported visible Skip produced 3112 non-black
 To remove the permission-dialog/focus confound, version 0.3 adds an explicitly armed mode: request consent before an ad, hold the grant without creating a virtual display for at most three minutes, then accept one privileged CAPTURE_ONCE broadcast without opening an activity. Capture still stops after one frame or a 12-second capture timeout. STOP_CAPTURE cancels the armed grant. No images are saved or transmitted, and no input/audio automation is added. The caller must verify YouTube/ad state before and after the snapshot.
 
 0.3 build/lint and APK signature checks passed. Armed-mode behavior still needs the physical consent/capture test.
+
+## Armed probe expiry and OCR necessity
+
+The three-minute grant expired at elapsedMs 1782047417 before the next user-confirmed ad. The subsequent CAPTURE_ONCE request took no frame, and MediaProjection was null. The ad again reported actions=55. This timing-only probe did not establish Skip readability.
+
+Version 0.4 extends the manual armed window to ten minutes with no frames read until one request, captures one 1280x720 frame, then releases projection before single-threaded offline text recognition. Exact English Skip-label candidates and bounds are reported; other recognized text is discarded. OCR is introduced only after physical accessibility inspection and upstream Cobalt source established no real Skip node, and media-session flags did not establish Skip readiness. No recognition loop or auto-input is added.
+
+An initial ML Kit build was abandoned before installation because its analytics-related dependencies conflict with this project's constraints. The selected implementation instead uses Tesseract4Android 4.9.0 and a pinned bundled English model, with no runtime model download or analytics backend. Network permissions are explicitly removed in the merged manifest. Model files are the only OCR data written to app storage. ABI is restricted to the tested Fire Stick's armeabi-v7a.
+
+The user currently reports a paused ad with a visible Skip button, which provides a controlled screen for the next manual test. No click or playback command was issued.
+
+0.4 device result: user reconfirmed paused ad with Skip visible after consent. One 1280x720 frame had 6073/14400 nonblack samples. Tesseract inspected 17 text lines in 3196 ms but returned no exact full-line Skip candidates. Capture completed; no input was sent. This is a recognition failure, not evidence that Skip was absent. Build and lint passed; APK signature verified and packaged permission list was empty. Installed versionCode 4 confirmed.
+

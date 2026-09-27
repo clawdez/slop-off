@@ -3,6 +3,11 @@ package tv.slopoff
 import android.app.Activity
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.Bitmap
+import com.googlecode.tesseract.android.TessBaseAPI
+import java.io.File
+
+import java.util.Locale
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
@@ -21,21 +26,28 @@ class CaptureProbeActivity : Activity() {
     companion object {
         // Only set after explicit system consent; cleared on every exit.
         private var armedInstance: java.lang.ref.WeakReference<CaptureProbeActivity>? = null
-        fun requestArmedFrame() { armedInstance?.get()?.beginArmedFrame() }
+        fun requestArmedFrame() {
+            val active = armedInstance?.get()
+            if (active != null) active.beginArmedFrame()
+            else Log.i("SLOPOFF_CAPTURE", "{\"result\":\"not_armed\"}")
+        }
         fun stopArmedProbe() { armedInstance?.get()?.complete("stopped_by_shell") }
     }
     private val handler = Handler(Looper.getMainLooper())
     private var projection: MediaProjection? = null
     private var reader: ImageReader? = null
     private var display: VirtualDisplay? = null
-    private var finished = false
+    @Volatile private var finished = false
+    private val engineLock = Any()
+    private var textEngine: TessBaseAPI? = null
+    private var processingText = false
     private var armedRequestStarted = false
     private var deadline = 0L
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         setContentView(TextView(this).apply {
-            text = "SLOP OFF — CAPTURE FEASIBILITY TEST\n\nOne frame in memory. No image saved or uploaded.\nNo clicking or audio changes. Returns to YouTube after consent."
+            text = "SLOP OFF — CAPTURE FEASIBILITY TEST\n\nOne frame, local text recognition. No image or screen text saved or uploaded.\nNo clicking or audio changes. Returns to YouTube after consent."
             textSize = 24f
             setPadding(48, 40, 48, 40)
         })
@@ -56,10 +68,10 @@ class CaptureProbeActivity : Activity() {
             val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             projection = manager.getMediaProjection(result, data)
             projection?.registerCallback(object : MediaProjection.Callback() {
-                override fun onStop() { complete("projection_stopped") }
+                override fun onStop() { if (!processingText) complete("projection_stopped") }
             }, handler)
             val armed = intent.getBooleanExtra("armed", false)
-            val lifetime = if (armed) 180_000L else 12_000L
+            val lifetime = if (armed) 600_000L else 12_000L
             deadline = SystemClock.elapsedRealtime() + lifetime
             handler.postDelayed({ complete("timeout") }, lifetime)
             moveTaskToBack(true)
@@ -93,12 +105,12 @@ class CaptureProbeActivity : Activity() {
                 if (SystemClock.elapsedRealtime() < deadline) handler.postDelayed({ waitForYouTube() }, 300)
                 return
             }
-            val imageReader = ImageReader.newInstance(640, 360, PixelFormat.RGBA_8888, 2)
+            val imageReader = ImageReader.newInstance(1280, 720, PixelFormat.RGBA_8888, 2)
             reader = imageReader
             imageReader.setOnImageAvailableListener({ source ->
                 if (!finished) inspectFrame(source)
             }, handler)
-            display = projection?.createVirtualDisplay("SlopOff-one-frame-probe", 640, 360,
+            display = projection?.createVirtualDisplay("SlopOff-one-frame-probe", 1280, 720,
                 resources.displayMetrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 imageReader.surface, null, handler)
             if (display == null) complete("display_unavailable")
@@ -106,38 +118,110 @@ class CaptureProbeActivity : Activity() {
     }
 
     private fun inspectFrame(source: ImageReader) {
+        if (processingText || finished) return
+        var bitmap: Bitmap? = null
         try {
             val frame = source.acquireLatestImage() ?: return
             try {
-                // Fail closed if the user switched apps while the frame was arriving.
                 if (!youtubeIsActive()) { complete("foreground_changed"); return }
                 val plane = frame.planes[0]
                 val bytes = plane.buffer
-                var samples = 0
+                val pixels = IntArray(frame.width * frame.height)
+                var sampled = 0
                 var nonBlack = 0
-                var minLuma = 255
-                var maxLuma = 0
-                for (y in 0 until frame.height step 8) for (x in 0 until frame.width step 8) {
+                for (y in 0 until frame.height) for (x in 0 until frame.width) {
                     val offset = y * plane.rowStride + x * plane.pixelStride
                     val r = bytes.get(offset).toInt() and 255
                     val g = bytes.get(offset + 1).toInt() and 255
                     val b = bytes.get(offset + 2).toInt() and 255
-                    val luma = (r + g + b) / 3
-                    minLuma = minOf(minLuma, luma)
-                    maxLuma = maxOf(maxLuma, luma)
-                    if (luma > 8) nonBlack++
-                    samples++
+                    pixels[y * frame.width + x] = (255 shl 24) or (r shl 16) or (g shl 8) or b
+                    if (x % 8 == 0 && y % 8 == 0) {
+                        sampled++
+                        if ((r + g + b) / 3 > 8) nonBlack++
+                    }
                 }
+                bitmap = Bitmap.createBitmap(pixels, frame.width, frame.height, Bitmap.Config.ARGB_8888)
                 Log.i("SLOPOFF_CAPTURE", JSONObject().put("result", "frame_received")
-                    .put("width", frame.width).put("height", frame.height).put("samples", samples)
-                    .put("nonBlackSamples", nonBlack).put("minLuma", minLuma).put("maxLuma", maxLuma)
-                    .put("imageSaved", false).put("elapsedMs", SystemClock.elapsedRealtime()).toString())
+                    .put("width", frame.width).put("height", frame.height).put("samples", sampled)
+                    .put("nonBlackSamples", nonBlack).put("imageSaved", false)
+                    .put("elapsedMs", SystemClock.elapsedRealtime()).toString())
             } finally { frame.close() }
-            complete("complete")
-        } catch (e: Exception) { complete("frame_error", e.javaClass.simpleName) }
+            processingText = true
+            // Stop frame delivery and release the projection BEFORE asynchronous OCR.
+            release()
+            handler.postDelayed({ complete("text_timeout") }, 30_000)
+            recognize(bitmap!!)
+        } catch (e: Exception) {
+            bitmap?.recycle()
+            complete("frame_error", e.javaClass.simpleName)
+        }
     }
 
-    private fun complete(result: String, error: String? = null) {
+    private fun recognize(bitmap: Bitmap) {
+        val appContext = applicationContext
+        Thread({
+            val started = SystemClock.elapsedRealtime()
+            var engine: TessBaseAPI? = null
+            try {
+                val dataRoot = File(appContext.filesDir, "ocr-model")
+                val model = File(dataRoot, "tessdata/eng.traineddata")
+                if (!model.exists()) {
+                    check(model.parentFile!!.mkdirs() || model.parentFile!!.isDirectory)
+                    appContext.assets.open("tessdata/eng.traineddata").use { input ->
+                        model.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+                engine = TessBaseAPI()
+                check(engine.init(dataRoot.absolutePath, "eng", TessBaseAPI.OEM_LSTM_ONLY))
+                synchronized(engineLock) { if (!finished) textEngine = engine }
+                if (finished) return@Thread
+                engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
+                engine.setImage(bitmap)
+                engine.getUTF8Text() // Results stay in native memory; arbitrary text is never logged.
+                val candidates = org.json.JSONArray()
+                var lines = 0
+                val level = TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE
+                val iterator = engine.resultIterator
+                if (iterator != null) {
+                    iterator.begin()
+                    do {
+                        if (finished) break
+                        lines++
+                        val normalized = iterator.getUTF8Text(level)?.trim()?.lowercase(Locale.ROOT)
+                            ?.replace(Regex("\\s+"), " ").orEmpty()
+                        if (normalized in setOf("skip", "skip ad", "skip ads", "skip advertisement")) {
+                            val box = iterator.getBoundingBox(level)
+                            candidates.put(JSONObject().put("label", normalized)
+                                .put("confidence", iterator.confidence(level))
+                                .put("bounds", org.json.JSONArray(box.toList())))
+                        }
+                    } while (iterator.next(level))
+                }
+                val result = JSONObject().put("result", "recognized").put("frameWidth", bitmap.width)
+                    .put("frameHeight", bitmap.height).put("linesInspected", lines)
+                    .put("candidates", candidates).put("durationMs", SystemClock.elapsedRealtime() - started)
+                    .put("elapsedMs", SystemClock.elapsedRealtime())
+                handler.post {
+                    if (!finished) {
+                        if (youtubeIsActive()) {
+                            Log.i("SLOPOFF_TEXT", result.toString())
+                            complete("complete")
+                        } else complete("foreground_changed")
+                    }
+                }
+            } catch (e: Exception) {
+                handler.post { complete("text_error", e.javaClass.simpleName) }
+            } catch (e: LinkageError) {
+                handler.post { complete("text_native_error", e.javaClass.simpleName) }
+            } finally {
+                synchronized(engineLock) {
+                    textEngine = null
+                    engine?.recycle()
+                }
+                bitmap.recycle()
+            }
+        }, "slopoff-single-frame-text").start()
+    }    private fun complete(result: String, error: String? = null) {
         if (finished) return
         finished = true
         Log.i("SLOPOFF_CAPTURE", JSONObject().put("result", result).put("error", error ?: "")
@@ -147,6 +231,7 @@ class CaptureProbeActivity : Activity() {
     }
 
     private fun release() {
+        if (finished) synchronized(engineLock) { textEngine?.stop() }
         if (armedInstance?.get() === this) armedInstance = null
         handler.removeCallbacksAndMessages(null)
         display?.release(); display = null

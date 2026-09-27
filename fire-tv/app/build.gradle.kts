@@ -12,8 +12,9 @@ android {
         applicationId = "tv.slopoff"
         minSdk = 28
         targetSdk = 28
-        versionCode = 3
-        versionName = "0.3-armed-probe"
+        ndk { abiFilters += "armeabi-v7a" }
+        versionCode = 4
+        versionName = "0.4-local-text-probe"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -21,3 +22,5 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
 }
+
+dependencies { implementation("cz.adaptech.tesseract4android:tesseract4android:4.9.0") }

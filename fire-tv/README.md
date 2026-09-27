@@ -116,3 +116,9 @@ adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.STOP_CAPTURE -n tv.slopo
 ```
 
 Both broadcasts remain protected by DUMP permission. An armed grant is not an ongoing frame capture. This is still a manual experiment, not a visual detector or automatic skipping implementation.
+
+### Offline text probe (0.4)
+
+The armed command is unchanged, but the grant now expires after **ten minutes**. No frames are read while waiting. CAPTURE_ONCE processes one 1280x720 frame with a bundled single-threaded English Tesseract model after releasing capture. Only exact Skip-label candidates, coordinates, confidence, line counts and elapsed time are logged under SLOPOFF_TEXT; images and other recognized text are not stored or uploaded. There is no recurring screenshot/OCR loop, network permission, database or analytics backend. Only the static model is copied to private app storage. See THIRD_PARTY.md for dependencies and model checksum.
+
+A 30-second text-processing timeout requests cancellation and ignores late results; native cancellation is cooperative, so it is not a guaranteed CPU deadline. Recognition success and confidence do not authorize clicks. The app still has no input injection or audio control. The diagnostic APK is limited to armeabi-v7a for the tested Stick. Build/lint, final manifest and device behavior must be verified before claiming this fallback works.
