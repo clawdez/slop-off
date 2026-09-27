@@ -306,3 +306,11 @@ Later app checks did recognize full-frame Sponsored at 96.64742 and Skip at 96.3
 
 Version 0.11 uses one additional 2x contextual region read when the tight crop is below 85. The new pass must meet the same confirmation threshold/geometry; scores from 80 to below 85 still require a matching separate frame, and conflicting/ambiguous qualifying readings fail closed. Low-confidence tight crops remain insufficient by themselves. At most five OCR passes share one frame. Aggregate brightness/opacity diagnostics and blank-frame rejection help distinguish unavailable imagery from OCR failure without saving pixels. Empty iterator entries are excluded from word counts. Device validation pending.
 Validation: version 0.11 debug assembly, lint and all 20 unit tests passed. APK signature verified; the only ordinary requested permission remains FOREGROUND_SERVICE. No network, storage or audio permission was added.
+
+## 0.11 automatic press and normal-content transition
+
+Version code 11 installation was verified. After consent, the app first entered Watching for ads, then started a media-event-triggered check at elapsedMs 1849827656 with no manual CAPTURE_ONCE or ENABLE_AUTOMATIC command. Copy time was 336 ms. Aggregate samples were 576 total, 246 nonblack and 527 opaque. Total recognition age was 5913 ms.
+
+Full-frame Sponsored scored 93.29389. Full-frame Skip scored 84.28297 and could not be the primary. Regional discovery (pass 2) found Skip at 96.80468, bounds [1102,630,1131,645]. Tight refinement scored only 46.572945. Contextual confirmation (pass 4) found Skip at 95.95007 with identical bounds, satisfying the existing guard. Accessibility dispatch was accepted at 1849833804 and completed at 1849833859. The app then returned to Watching for ads; no frames running. A subsequent system check showed YouTube playing with actions=383, the projection grant retained, and no temporary SlopOff display. No ADB input command was used.
+
+This proves the regional/contextual checks and automatic app-press path operated on the physical device. The user's visual confirmation of the resulting skip is still pending. It does not establish repeat reliability, negative-case behavior or production readiness. No new setup dialog was opened after this session started.
