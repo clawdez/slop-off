@@ -51,3 +51,7 @@ Everything runs locally. Zero network requests. Zero tracking. The code is right
 ## License
 
 MIT — do whatever you want with it.
+
+## Fire TV (experimental)
+
+A separate Kotlin diagnostic application lives in [fire-tv/](fire-tv/README.md), targeting Fire OS 7 / Android 9. It observes accessibility signals from the official YouTube TV app to establish whether safe automatic skipping is possible. This initial diagnostic build does **not** skip or mute ads. See [device findings and current status](fire-tv/FINDINGS.md). The Chrome extension continues to work independently.
