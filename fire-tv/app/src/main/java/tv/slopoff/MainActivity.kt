@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 class MainActivity : Activity() {
@@ -23,6 +24,16 @@ class MainActivity : Activity() {
         fun button(label: String, action: () -> Unit) {
             layout.addView(Button(this).apply { text = label; setOnClickListener { action() } })
         }
+        button("Start protection session (experimental)") {
+            startActivity(Intent(this, CaptureProbeActivity::class.java).apply {
+                putExtra("session", true); putExtra("armed", true); putExtra("automatic", true)
+            })
+        }
+        button("Stop protection session") { CaptureSessionService.instance?.shutdown(); render() }
+        button("Set up media access") {
+            try { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            catch (_: Exception) { status.text = "Fire OS hides this setup screen. Media access needs developer setup." }
+        }
         button("Enable / disable diagnostics") {
             val prefs = getSharedPreferences("diagnostics", MODE_PRIVATE)
             prefs.edit().putBoolean("enabled", !prefs.getBoolean("enabled", true)).apply()
@@ -38,14 +49,14 @@ class MainActivity : Activity() {
             render()
         }
         layout.addView(TextView(this).apply {
-            text = "Setup: enable Slop Off TV diagnostics in Accessibility.\nAutomatic protection is not active. A developer-requested one-shot Skip test is available. Audio stays unchanged."
+            text = "Experimental protection requires Accessibility, media access, and one screen permission per session.\nEverything stays on this TV. Audio stays unchanged."
             textSize = 16f
         })
-        setContentView(layout)
+        setContentView(ScrollView(this).apply { addView(layout) })
         layout.getChildAt(2).requestFocus()
     }
     private fun render() {
-        status.text = "Protection: NOT IMPLEMENTED (diagnostic build)\nDiagnostics: ${if (getSharedPreferences("diagnostics", MODE_PRIVATE).getBoolean("enabled", true)) "ENABLED" else "DISABLED"}\nAccessibility: ${if (DiagnosticService.instance != null) "CONNECTED" else "NOT CONNECTED"}\nYouTube: ${DiagnosticService.foreground}\nLast event: ${DiagnosticService.lastEvent}\nVersion: ${BuildConfig.VERSION_NAME}"
+        status.text = "Session: ${CaptureSessionService.status}\nDiagnostics: ${if (getSharedPreferences("diagnostics", MODE_PRIVATE).getBoolean("enabled", true)) "ENABLED" else "DISABLED"}\nAccessibility: ${if (DiagnosticService.instance != null) "CONNECTED" else "NOT CONNECTED"}\nYouTube: ${DiagnosticService.foreground}\nLast event: ${DiagnosticService.lastEvent}\nVersion: ${BuildConfig.VERSION_NAME}"
     }
     override fun onResume() { super.onResume(); DiagnosticService.uiRefresh = { runOnUiThread(refresh) }; render() }
     override fun onPause() { DiagnosticService.uiRefresh = null; super.onPause() }

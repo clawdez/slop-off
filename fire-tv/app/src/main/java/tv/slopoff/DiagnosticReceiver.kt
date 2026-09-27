@@ -11,6 +11,7 @@ class DiagnosticReceiver : BroadcastReceiver() {
             "tv.slopoff.DUMP" -> DiagnosticService.instance?.requestDump()
             "tv.slopoff.CAPTURE_ONCE" -> CaptureProbeActivity.requestArmedFrame()
             "tv.slopoff.STOP_CAPTURE" -> CaptureProbeActivity.stopArmedProbe()
+            "tv.slopoff.ENABLE_AUTOMATIC" -> CaptureSessionService.instance?.enableAutomatic()
         }
     }
 }

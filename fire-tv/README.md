@@ -1,6 +1,6 @@
 # Slop Off TV — physical-device experiment
 
-A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Automatic protection is not active.** Version 0.6 adds an explicitly requested one-shot gesture experiment; it does not run unattended.
+A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.7 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, but app-level Skip input and event behavior still need physical validation.
 
 ## Current status
 
@@ -10,9 +10,43 @@ A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / 
 | Working in one controlled test | ADB tap at the recognized label skipped a paused ad; the user confirmed regular video resumed |
 | Partially working | Visual recognition: both full-frame and enlarged-region passes recognized Skip at 92–93% confidence in one confirmed example, after whole-line matching failed |
 | Needs device test | The app's accessibility gesture path, Sponsored marker recognition, refusal on normal content, repeated ads and non-skippable ads |
-| Not implemented | Unattended ad detection/auto-skip, audio suppression, production background capture lifecycle |
+| Implemented, unverified | Reusable foreground session, media-event-triggered bounded checks and guarded input |
+| Not implemented | Audio suppression, automatic recovery of screen permission after process death or reboot |
 
 Accessibility-based node clicking is not viable in the observed YouTube version: both accessibility inspectors saw 16 unlabeled nodes with no real Skip action. ADB media-session actions correlate with ad/content transitions in limited observations, but do not prove Skip readiness. See [FINDINGS.md](FINDINGS.md) for evidence and limitations.
+
+## Reusable session (0.7)
+
+Start from the TV app's **Start protection session (experimental)** button. Existing sessions are reused without another screen-permission prompt. For the first setup, approve Accessibility and media access, then **Start now**. The foreground service keeps the grant until Stop, revocation, a crash/process stop, or eight hours. A new grant is required after the session ends. No frame reader or virtual display exists between requests, and no pixels are stored. This API-28 implementation is not validated for newer Android projection restrictions.
+
+Media access is Android notification-listener authorization. The implementation ignores notification contents and never reads media metadata; it uses only YouTube playback-state events and the occurrence of metadata-change events. Because this is a broader system permission, obtain explicit user approval before enabling it through development setup:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell settings get secure enabled_notification_listeners
+adb -s FIRE_TV_IP:5555 shell cmd notification allow_listener tv.slopoff/tv.slopoff.MediaAccessService
+```
+
+Preserve existing listeners. To revoke only this app's access:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell cmd notification disallow_listener tv.slopoff/tv.slopoff.MediaAccessService
+```
+
+For controlled testing with the same permission grant, start a retained manual session:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell am start -f 0x10008000 -n tv.slopoff/.CaptureProbeActivity --ez armed true --ez session true --ez test_skip true
+adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.CAPTURE_ONCE -n tv.slopoff/.DiagnosticReceiver
+```
+
+After app input is proven on the device, turn on the event trigger without reopening the dialog:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.ENABLE_AUTOMATIC -n tv.slopoff/.DiagnosticReceiver
+adb -s FIRE_TV_IP:5555 logcat -v brief SLOPOFF_SESSION:I SLOPOFF_TEXT:I SLOPOFF_INPUT:I '*:S'
+```
+
+Only observed transport action values 53/55 initiate candidate checks. They are not proof of an ad. Each candidate burst permits at most six scans over 45 seconds, spaced four seconds after completion, with at most twelve automatic attempts per minute across all events. The ad/button visual gate remains mandatory. Normal content, app switching, missing access, disabled diagnostics and stale windows invalidate pending evidence. There is no idle screenshot/OCR timer. Missing or different transport flags, delayed Skip, unfamiliar layouts and false-positive rates need further tests. A stop action is available in the app and session notification. The system FOREGROUND_SERVICE permission is added; network/storage/audio permissions are absent.
 
 ## Build
 

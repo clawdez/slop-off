@@ -50,9 +50,11 @@ class DiagnosticService : AccessibilityService() {
     }
     fun refreshEnabled() {
         enabled = getSharedPreferences("diagnostics", Context.MODE_PRIVATE).getBoolean("enabled", true)
+        if (!enabled) CaptureSessionService.instance?.shutdown("Diagnostics disabled")
         if (!enabled) { queued.set(false); dumpUntil = 0; if (::worker.isInitialized) worker.removeCallbacksAndMessages(null) }
         else if (::worker.isInitialized) schedule()
     }
+    internal fun diagnosticsEnabled() = enabled
     private fun schedule() {
         // One queued scan, no repeating timer and no unbounded event backlog.
         if (queued.compareAndSet(false, true)) worker.postDelayed(scan, 150)
@@ -60,7 +62,10 @@ class DiagnosticService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!enabled || event == null || !::worker.isInitialized) return
         val type = event.eventType
-        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) windowEpoch++
+        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            windowEpoch++
+            CaptureSessionService.instance?.foregroundSignal()
+        }
         if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && event.packageName?.toString() !in youtubePackages) return
         if (type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) contentEvents.incrementAndGet() else windowEvents.incrementAndGet()
         schedule()
@@ -74,12 +79,12 @@ class DiagnosticService : AccessibilityService() {
     }
     fun requestDump() { if (enabled && ::worker.isInitialized) worker.post { inspect(true) } }
 
-    // Called only by the shell-protected one-shot probe after its visual gate passes.
-    // No timer, event handler, or persistent setting can invoke input on its own.
+    // The active consent session supplies fresh visual evidence; never accepts raw coordinates.
     internal fun testVisualSkip(words: List<VisualSkipGate.Word>, width: Int, height: Int,
         capturedAt: Long, expectedWindow: Int, expectedEpoch: Long, done: (String) -> Unit) {
         val now = SystemClock.elapsedRealtime()
-        if (!enabled || windowEpoch != expectedEpoch || now - lastTestTap < 10_000) {
+        if (!enabled || windowEpoch != expectedEpoch || now - lastTestTap < 10_000 ||
+            !(getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive) {
             done("gesture_guard_rejected"); return
         }
         val point = VisualSkipGate.target(words, width, height, now - capturedAt)
@@ -211,8 +216,12 @@ class DiagnosticService : AccessibilityService() {
             report("SLOPOFF_SERVICE", JSONObject().put("inspectionError", e.javaClass.simpleName))
         }
     }
-    override fun onInterrupt() { lastEvent = "Service interrupted"; uiRefresh?.invoke() }
+    override fun onInterrupt() {
+        CaptureSessionService.instance?.shutdown("Accessibility interrupted")
+        lastEvent = "Service interrupted"; uiRefresh?.invoke()
+    }
     override fun onDestroy() {
+        CaptureSessionService.instance?.shutdown("Accessibility disconnected")
         enabled = false
         if (::worker.isInitialized) worker.removeCallbacksAndMessages(null)
         thread.quitSafely()
