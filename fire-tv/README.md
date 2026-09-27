@@ -1,15 +1,15 @@
 # Slop Off TV — physical-device experiment
 
-A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.8 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, but app-level Skip input and event behavior still need physical validation.
+A local Kotlin app for official YouTube on Fire TV Stick (3rd Gen), Fire OS 7 / Android 9 (API 28). The browser extension is independent and unchanged. **Version 0.8 is an experimental session candidate, not a production release.** It can run bounded automatic checks after explicit session startup and required permissions, App-driven Skip has been confirmed once on the physical device; event-driven automatic behavior still needs verification.
 
 ## Current status
 
 | Status | Behavior |
 |---|---|
 | Working on the tested device | Install, accessibility binding, official YouTube foreground identification, consent-based single-frame capture and offline Skip recognition |
-| Working in one controlled test | ADB tap at the recognized label skipped a paused ad; the user confirmed regular video resumed |
+| Working in controlled tests | ADB targeting and then the app's own guarded accessibility gesture each skipped an ad; the user confirmed playback resumed |
 | Partially working | Visual recognition: both full-frame and enlarged-region passes recognized Skip at 92–93% confidence in one confirmed example, after whole-line matching failed |
-| Needs device test | The app's accessibility gesture path, Sponsored marker recognition, refusal on normal content, repeated ads and non-skippable ads |
+| Needs device test | Automatic event triggering, normal-content refusal, repeated ads and non-skippable ads |
 | Implemented, unverified | Reusable foreground session, media-event-triggered bounded checks and guarded input |
 | Not implemented | Audio suppression, automatic recovery of screen permission after process death or reboot |
 
