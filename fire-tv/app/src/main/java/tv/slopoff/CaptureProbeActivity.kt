@@ -176,29 +176,47 @@ class CaptureProbeActivity : Activity() {
                 synchronized(engineLock) { if (!finished) textEngine = engine }
                 if (finished) return@Thread
                 engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT)
-                engine.setImage(bitmap)
-                engine.getUTF8Text() // Results stay in native memory; arbitrary text is never logged.
                 val candidates = org.json.JSONArray()
-                var lines = 0
-                val level = TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE
-                val iterator = engine.resultIterator
-                if (iterator != null) {
-                    iterator.begin()
-                    do {
-                        if (finished) break
-                        lines++
-                        val normalized = iterator.getUTF8Text(level)?.trim()?.lowercase(Locale.ROOT)
-                            ?.replace(Regex("\\s+"), " ").orEmpty()
-                        if (normalized in setOf("skip", "skip ad", "skip ads", "skip advertisement")) {
-                            val box = iterator.getBoundingBox(level)
-                            candidates.put(JSONObject().put("label", normalized)
-                                .put("confidence", iterator.confidence(level))
-                                .put("bounds", org.json.JSONArray(box.toList())))
+                var words = 0
+                // Two bounded passes over ONE frame. Word matching avoids requiring
+                // nearby countdown text or button icons to form an exact whole line.
+                for (pass in 0..1) {
+                    if (finished) break
+                    val left = if (pass == 0) 0 else bitmap.width / 2
+                    val top = if (pass == 0) 0 else bitmap.height / 2
+                    val scale = if (pass == 0) 1 else 2
+                    val input = if (pass == 0) bitmap else {
+                        val crop = Bitmap.createBitmap(bitmap, left, top,
+                            bitmap.width - left, bitmap.height - top)
+                        try { Bitmap.createScaledBitmap(crop, crop.width * scale, crop.height * scale, true) }
+                        finally { crop.recycle() }
+                    }
+                    try {
+                        engine.setImage(input)
+                        engine.getUTF8Text() // Arbitrary recognized text is never logged.
+                        val level = TessBaseAPI.PageIteratorLevel.RIL_WORD
+                        val iterator = engine.resultIterator
+                        if (iterator != null) {
+                            iterator.begin()
+                            do {
+                                if (finished) break
+                                words++
+                                val normalized = iterator.getUTF8Text(level)?.trim()
+                                    ?.lowercase(Locale.ROOT)?.trim { !it.isLetter() }.orEmpty()
+                                if (normalized in setOf("skip", "skipad", "skipads")) {
+                                    val box = iterator.getBoundingBox(level)
+                                    val mapped = listOf(box[0] / scale + left, box[1] / scale + top,
+                                        box[2] / scale + left, box[3] / scale + top)
+                                    candidates.put(JSONObject().put("label", normalized)
+                                        .put("pass", pass).put("confidence", iterator.confidence(level))
+                                        .put("bounds", org.json.JSONArray(mapped)))
+                                }
+                            } while (iterator.next(level))
                         }
-                    } while (iterator.next(level))
+                    } finally { if (input !== bitmap) input.recycle() }
                 }
                 val result = JSONObject().put("result", "recognized").put("frameWidth", bitmap.width)
-                    .put("frameHeight", bitmap.height).put("linesInspected", lines)
+                    .put("frameHeight", bitmap.height).put("wordsInspected", words)
                     .put("candidates", candidates).put("durationMs", SystemClock.elapsedRealtime() - started)
                     .put("elapsedMs", SystemClock.elapsedRealtime())
                 handler.post {
@@ -221,7 +239,9 @@ class CaptureProbeActivity : Activity() {
                 bitmap.recycle()
             }
         }, "slopoff-single-frame-text").start()
-    }    private fun complete(result: String, error: String? = null) {
+    }
+
+    private fun complete(result: String, error: String? = null) {
         if (finished) return
         finished = true
         Log.i("SLOPOFF_CAPTURE", JSONObject().put("result", result).put("error", error ?: "")

@@ -248,3 +248,8 @@ The user currently reports a paused ad with a visible Skip button, which provide
 
 0.4 device result: user reconfirmed paused ad with Skip visible after consent. One 1280x720 frame had 6073/14400 nonblack samples. Tesseract inspected 17 text lines in 3196 ms but returned no exact full-line Skip candidates. Capture completed; no input was sent. This is a recognition failure, not evidence that Skip was absent. Build and lint passed; APK signature verified and packaged permission list was empty. Installed versionCode 4 confirmed.
 
+
+## 0.5 bounded word probe
+
+The user supplied a photo showing paused YouTube with a bottom-right Skip label, adjacent icon and countdown. The 0.4 whole-line comparison could reject labels grouped with adjacent UI. Version 0.5 compares exact normalized words (Skip, Skipad, Skipads), with coordinates and confidence, in two bounded OCR passes: full frame and doubled bottom-right quadrant. Both passes use the same one captured frame; no periodic capture or input is added. A word match remains diagnostic, not proof of a clickable ad button. Device validation pending.
+
