@@ -212,3 +212,18 @@ Source: https://github.com/youtube/cobalt/blob/25.lts.1%2B/starboard/android/apk
 Fire TV's service registry exposes media_projection and media_session. Service presence is not proof that app capture works. Added a manual, permission-gated, one-frame MediaProjection probe (0.2) to test this empirically before implementing visual detection. Captures remain in memory; only aggregate frame statistics are logged. No screenshots are uploaded, saved to disk, or included in the repository. No input or audio changes are added. Physical capture consent/result are pending.
 
 0.2 validation: assembleDebug and lintDebug passed; APK v2 signature verified, versionCode=2, min/target SDK 28, no requested permissions added. Physical MediaProjection functionality remains pending the consent test.
+
+## Physical MediaProjection result — 2026-09-26
+
+After the user returned to official YouTube and approved Start now, filtered capture logs showed two separate one-frame probe completions. The initial short logcat window missed these messages because unrelated device logs advanced quickly; an unrestricted tag-filtered read recovered them.
+
+| Probe completion (elapsedMs) | Frame | Sampled pixels | Non-black samples | Luminance range | Image saved |
+|---:|---|---:|---:|---|---|
+| 1780970052 | 640x360 | 3600 | 1594 | 0–222 | No |
+| 1781093813 | 640x360 | 3600 | 9 | 0–203 | No |
+
+Both probes logged frame_received followed by complete. `dumpsys media_projection` subsequently reported null, confirming no active projection remained. The exact video/ad state at each frame was not labeled by the user; do not infer protected playback, usable video capture, or Skip readability from these statistics. The second frame was almost entirely black. This establishes that consent-based app-level frame delivery works on the physical device, not that a visual detector is feasible or reliable.
+
+A stale/waiting launch was recovered by cancelling the host wait and starting the probe using Android-9-compatible flags `am start -f 0x10008000 -n tv.slopoff/.CaptureProbeActivity`. The first attempt with the named --activity-new-task switch failed because this device's am does not support that spelling; no capture was started by that failed command.
+
+Next controlled test: capture a frame while the user confirms an ad's Skip button is visible, before considering visual matching. No OCR, clicks, media commands, audio changes or continuous capture were introduced. Accessibility remains connected; capture is stopped.
