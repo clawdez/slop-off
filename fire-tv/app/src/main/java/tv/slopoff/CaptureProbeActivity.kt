@@ -18,11 +18,18 @@ import org.json.JSONObject
 
 /** API-28 feasibility probe only: explicit consent, one in-memory frame, hard timeout. */
 class CaptureProbeActivity : Activity() {
+    companion object {
+        // Only set after explicit system consent; cleared on every exit.
+        private var armedInstance: java.lang.ref.WeakReference<CaptureProbeActivity>? = null
+        fun requestArmedFrame() { armedInstance?.get()?.beginArmedFrame() }
+        fun stopArmedProbe() { armedInstance?.get()?.complete("stopped_by_shell") }
+    }
     private val handler = Handler(Looper.getMainLooper())
     private var projection: MediaProjection? = null
     private var reader: ImageReader? = null
     private var display: VirtualDisplay? = null
     private var finished = false
+    private var armedRequestStarted = false
     private var deadline = 0L
 
     override fun onCreate(state: Bundle?) {
@@ -51,11 +58,26 @@ class CaptureProbeActivity : Activity() {
             projection?.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() { complete("projection_stopped") }
             }, handler)
-            deadline = SystemClock.elapsedRealtime() + 12_000
-            handler.postDelayed({ complete("timeout") }, 12_000)
+            val armed = intent.getBooleanExtra("armed", false)
+            val lifetime = if (armed) 180_000L else 12_000L
+            deadline = SystemClock.elapsedRealtime() + lifetime
+            handler.postDelayed({ complete("timeout") }, lifetime)
             moveTaskToBack(true)
-            handler.postDelayed({ waitForYouTube() }, 1500)
+            if (armed) {
+                armedInstance = java.lang.ref.WeakReference(this)
+                Log.i("SLOPOFF_CAPTURE", JSONObject().put("result", "armed_no_frames")
+                    .put("expiresMs", deadline).put("imageSaved", false).toString())
+            } else handler.postDelayed({ waitForYouTube() }, 1500)
         } catch (e: Exception) { complete("projection_error", e.javaClass.simpleName) }
+    }
+
+    private fun beginArmedFrame() {
+        if (finished || armedRequestStarted || display != null || SystemClock.elapsedRealtime() >= deadline) return
+        armedRequestStarted = true
+        handler.removeCallbacksAndMessages(null)
+        deadline = SystemClock.elapsedRealtime() + 12_000
+        handler.postDelayed({ complete("timeout") }, 12_000)
+        waitForYouTube()
     }
 
     private fun youtubeIsActive(): Boolean {
@@ -125,6 +147,7 @@ class CaptureProbeActivity : Activity() {
     }
 
     private fun release() {
+        if (armedInstance?.get() === this) armedInstance = null
         handler.removeCallbacksAndMessages(null)
         display?.release(); display = null
         reader?.close(); reader = null

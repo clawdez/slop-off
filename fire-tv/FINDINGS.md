@@ -227,3 +227,11 @@ Both probes logged frame_received followed by complete. `dumpsys media_projectio
 A stale/waiting launch was recovered by cancelling the host wait and starting the probe using Android-9-compatible flags `am start -f 0x10008000 -n tv.slopoff/.CaptureProbeActivity`. The first attempt with the named --activity-new-task switch failed because this device's am does not support that spelling; no capture was started by that failed command.
 
 Next controlled test: capture a frame while the user confirms an ad's Skip button is visible, before considering visual matching. No OCR, clicks, media commands, audio changes or continuous capture were introduced. Accessibility remains connected; capture is stopped.
+
+## Capture timing confound reported by user
+
+A capture requested after the user reported visible Skip produced 3112 non-black samples out of 3600 (640x360, luminance 0–255) at elapsedMs 1781442221 and completed at 1781442223. MediaProjection was subsequently null. The user then reported that the ad skipped when Start now was selected. The probe does not send any input or transport action, but the cause of the transition is unknown: natural ad completion, remote event/focus behavior or another effect cannot be excluded. Do not label that frame a confirmed Skip-visible capture or claim that requesting projection skips ads.
+
+To remove the permission-dialog/focus confound, version 0.3 adds an explicitly armed mode: request consent before an ad, hold the grant without creating a virtual display for at most three minutes, then accept one privileged CAPTURE_ONCE broadcast without opening an activity. Capture still stops after one frame or a 12-second capture timeout. STOP_CAPTURE cancels the armed grant. No images are saved or transmitted, and no input/audio automation is added. The caller must verify YouTube/ad state before and after the snapshot.
+
+0.3 build/lint and APK signature checks passed. Armed-mode behavior still needs the physical consent/capture test.

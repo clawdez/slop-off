@@ -94,3 +94,25 @@ adb -s FIRE_TV_IP:5555 logcat -v brief SLOPOFF_CAPTURE:I '*:S'
 The TV must grant screen-capture consent. After approval, the activity moves its task to the background and waits at most 12 seconds for an active YouTube accessibility root. It then creates a 640x360 virtual display, inspects one frame in memory and releases capture. A foreground change, denial, error, timeout or activity destruction stops the experiment. A frame already in flight when foreground changes is discarded. No image is saved or transmitted. Only dimensions and aggregate brightness counts are logged. An all-black frame or visible UI pixels alone does not prove a Skip button can be captured or recognized; that requires further device evidence. The projection token is not persisted or reused.
 
 This implementation targets the specified API 28 device and is not a production capture service for newer Android versions. Existing diagnostics remain independent.
+
+### Pre-consented single-frame test (0.3)
+
+To avoid a consent dialog changing focus during an ad, start this while normal YouTube is foregrounded:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell am start -f 0x10008000 -n tv.slopoff/.CaptureProbeActivity --ez armed true
+```
+
+Approve the system prompt on the television. The log reports armed_no_frames: no virtual display or frame reader exists yet. The consent grant expires in three minutes. When the user confirms a visible Skip button, capture once without opening any UI:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.CAPTURE_ONCE -n tv.slopoff/.DiagnosticReceiver
+```
+
+The first request is the only one accepted; capture releases after one frame or a 12-second timeout. To cancel early:
+
+```powershell
+adb -s FIRE_TV_IP:5555 shell am broadcast -a tv.slopoff.STOP_CAPTURE -n tv.slopoff/.DiagnosticReceiver
+```
+
+Both broadcasts remain protected by DUMP permission. An armed grant is not an ongoing frame capture. This is still a manual experiment, not a visual detector or automatic skipping implementation.
